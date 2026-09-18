@@ -12,14 +12,47 @@ export interface UserProfile {
   email?: string;
 }
 
+export type ChannelType = 'text' | 'voice' | 'files' | 'tasks';
+
 export interface Channel {
   id: string;
   server_id: string;
   name: string;
-  type: 'text' | 'voice';
+  type: ChannelType;
   category?: string;
   topic?: string;
   unread_count?: number;
+}
+
+export interface FileFolder {
+  id: string;
+  project_id: string;
+  name: string;
+  parent_id: string | null;
+  created_at: string;
+}
+
+export interface ProjectFile {
+  id: string;
+  project_id: string;
+  folder_id: string | null;
+  name: string;
+  size: number;
+  mime_type: string;
+  url: string; // Base64 data URL or external URL
+  uploaded_by: UserProfile;
+  created_at: string;
+}
+
+export interface ProjectTask {
+  id: string;
+  project_id: string;
+  title: string;
+  description?: string;
+  status: 'todo' | 'in_progress' | 'done';
+  assigned_to?: UserProfile;
+  priority: 'low' | 'medium' | 'high';
+  created_at: string;
 }
 
 export interface Server {

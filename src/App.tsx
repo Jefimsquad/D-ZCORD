@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
-import type { Server, Channel, Message, UserProfile } from './types';
+import type { Server, Channel, Message, UserProfile, FileFolder, ProjectFile, ProjectTask } from './types';
 import {
   currentUser as initialCurrentUser,
   initialServers,
   initialMessages,
   sampleUsers,
+  initialFolders,
+  initialFiles,
+  initialTasks,
 } from './mockData';
 import { getSupabase, testSupabaseConnection, getStoredSupabaseConfig } from './lib/supabase';
 import { ServerSidebar } from './components/ServerSidebar';
@@ -16,14 +19,18 @@ import { DirectMessagesView } from './components/DirectMessagesView';
 import { UserSettingsModal } from './components/UserSettingsModal';
 import { CreateChannelModal } from './components/CreateChannelModal';
 import { CreateServerModal } from './components/CreateServerModal';
+import { FileStorageView } from './components/FileStorageView';
+import { ProjectTaskBoard } from './components/ProjectTaskBoard';
+import { LoginModal } from './components/LoginModal';
 
 export function App() {
-  // State
+  // Current user (editable locally)
   const [currentUser, setCurrentUser] = useState<UserProfile>(() => {
     const saved = localStorage.getItem('dezcord_current_user');
     return saved ? JSON.parse(saved) : initialCurrentUser;
   });
 
+  // Projects / Servers
   const [servers, setServers] = useState<Server[]>(() => {
     const saved = localStorage.getItem('dezcord_servers');
     return saved ? JSON.parse(saved) : initialServers;
@@ -33,17 +40,41 @@ export function App() {
   const [activeChannelId, setActiveChannelId] = useState<string>('c_geral');
   const [activeVoiceChannel, setActiveVoiceChannel] = useState<Channel | null>(null);
 
+  // Active View Mode inside Project: 'channel' | 'files' | 'tasks'
+  const [activeView, setActiveView] = useState<'channel' | 'files' | 'tasks'>('channel');
+
+  // Messages map by channel ID
   const [messagesMap, setMessagesMap] = useState<Record<string, Message[]>>(() => {
     const saved = localStorage.getItem('dezcord_messages');
     return saved ? JSON.parse(saved) : initialMessages;
   });
 
+  // Project Folders & Files
+  const [folders, setFolders] = useState<FileFolder[]>(() => {
+    const saved = localStorage.getItem('dezcord_folders');
+    return saved ? JSON.parse(saved) : initialFolders;
+  });
+
+  const [files, setFiles] = useState<ProjectFile[]>(() => {
+    const saved = localStorage.getItem('dezcord_files');
+    return saved ? JSON.parse(saved) : initialFiles;
+  });
+
+  // Project Tasks
+  const [tasks, setTasks] = useState<ProjectTask[]>(() => {
+    const saved = localStorage.getItem('dezcord_tasks');
+    return saved ? JSON.parse(saved) : initialTasks;
+  });
+
+  // Audio / UI State
   const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
   const [showMemberList, setShowMemberList] = useState(true);
+  const [isBotTyping, setIsBotTyping] = useState(false);
 
   // Modals state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false);
   const [createChannelType, setCreateChannelType] = useState<'text' | 'voice'>('text');
   const [isCreateServerOpen, setIsCreateServerOpen] = useState(false);
@@ -59,6 +90,18 @@ export function App() {
   useEffect(() => {
     localStorage.setItem('dezcord_messages', JSON.stringify(messagesMap));
   }, [messagesMap]);
+
+  useEffect(() => {
+    localStorage.setItem('dezcord_folders', JSON.stringify(folders));
+  }, [folders]);
+
+  useEffect(() => {
+    localStorage.setItem('dezcord_files', JSON.stringify(files));
+  }, [files]);
+
+  useEffect(() => {
+    localStorage.setItem('dezcord_tasks', JSON.stringify(tasks));
+  }, [tasks]);
 
   useEffect(() => {
     localStorage.setItem('dezcord_current_user', JSON.stringify(currentUser));
@@ -120,7 +163,7 @@ export function App() {
   const activeServer = servers.find((s) => s.id === activeServerId) || null;
   const activeChannel = activeServer?.channels.find((c) => c.id === activeChannelId) || null;
 
-  // Handle Send Message
+  // Handle Send Message & Smart AI DézBot Automation
   const handleSendMessage = async (content: string, attachments?: string[]) => {
     if (!activeChannel) return;
 
@@ -135,7 +178,7 @@ export function App() {
       reactions: [],
     };
 
-    // Update locally immediately
+    // Update message stream locally
     setMessagesMap((prev) => ({
       ...prev,
       [activeChannel.id]: [...(prev[activeChannel.id] || []), newMsg],
@@ -157,6 +200,70 @@ export function App() {
         console.warn('Falha ao sincronizar com Supabase:', err);
       }
     }
+
+    // DézBot IA Automation Trigger
+    const lower = content.toLowerCase().trim();
+    if (lower.startsWith('/ia') || lower.startsWith('/ajuda') || lower.startsWith('/resumo') || lower.startsWith('/tarefa') || lower.includes('@déz bot')) {
+      setIsBotTyping(true);
+
+      setTimeout(() => {
+        let botResponse = '';
+        const botUser = sampleUsers[1]; // DÉZ BOT
+
+        if (lower.startsWith('/ajuda')) {
+          botResponse = `🤖 **Comandos Rápidos do DÉZCORD:**
+- \`/ia [pergunta]\` : Tira dúvidas sobre desenvolvimento, arquitetura e organização do projeto.
+- \`/resumo\` : Exibe um resumo dos canais, tarefas e arquivos do projeto atual.
+- \`/tarefa [título]\` : Cria uma nova tarefa automaticamente no quadro do projeto!
+- Acesse também as abas laterais **📁 Arquivos & Documentos** e **📋 Quadro de Tarefas**.`;
+        } else if (lower.startsWith('/resumo')) {
+          const currentProjectTasks = tasks.filter((t) => t.project_id === activeServerId);
+          const currentProjectFiles = files.filter((f) => f.project_id === activeServerId);
+          botResponse = `📊 **Resumo do Projeto: ${activeServer?.name}**
+- **Canais:** ${activeServer?.channels.length || 0} canais configurados
+- **Arquivos no Drive:** ${currentProjectFiles.length} arquivos organizados em pastas
+- **Tarefas:** ${currentProjectTasks.filter((t) => t.status === 'done').length} concluídas de ${currentProjectTasks.length} totais.`;
+        } else if (lower.startsWith('/tarefa')) {
+          const taskTitle = content.replace(/^\/tarefa\s*/i, '').trim() || 'Nova tarefa rápida';
+          const newTask: ProjectTask = {
+            id: `tsk_${Date.now()}`,
+            project_id: activeServerId || 'srv_dezcord',
+            title: taskTitle,
+            status: 'todo',
+            priority: 'medium',
+            assigned_to: currentUser,
+            created_at: new Date().toISOString(),
+          };
+          setTasks((prev) => [newTask, ...prev]);
+          botResponse = `✅ **Tarefa criada no Quadro com sucesso:** "${taskTitle}"! Você pode visualizá-la na aba **📋 Quadro de Tarefas**.`;
+        } else {
+          // General /ia prompt
+          const query = content.replace(/^\/ia\s*/i, '').replace(/@déz bot/gi, '').trim();
+          botResponse = `🤖 **DÉZ BOT IA:** Analisei sua solicitação *" ${query || 'como organizar o projeto'} "*!
+Recomendo dividir o fluxo em:
+1. **Discussão nos Canais de Texto:** Para alinhamento rápido e decisões técnicas.
+2. **Armazenamento de Documentos:** Salvar assets e especificações na aba **📁 Arquivos & Documentos**.
+3. **Acompanhamento no Quadro de Tarefas:** Mover tarefas para *Concluído* conforme finalizadas!`;
+        }
+
+        const botMsg: Message = {
+          id: `bot_msg_${Date.now()}`,
+          channel_id: activeChannel.id,
+          user_id: botUser.id,
+          author: botUser,
+          content: botResponse,
+          created_at: new Date().toISOString(),
+          reactions: [{ emoji: '⚡', count: 1, users: [currentUser.id] }],
+        };
+
+        setMessagesMap((prev) => ({
+          ...prev,
+          [activeChannel.id]: [...(prev[activeChannel.id] || []), botMsg],
+        }));
+
+        setIsBotTyping(false);
+      }, 700);
+    }
   };
 
   // Handle Add/Toggle Reaction
@@ -175,11 +282,9 @@ export function App() {
           const react = { ...reactions[existingIndex] };
           const userIdx = react.users.indexOf(currentUser.id);
           if (userIdx > -1) {
-            // Remove reaction
             react.users = react.users.filter((id) => id !== currentUser.id);
             react.count -= 1;
           } else {
-            // Add reaction
             react.users = [...react.users, currentUser.id];
             react.count += 1;
           }
@@ -225,6 +330,7 @@ export function App() {
   // Handle Select Channel
   const handleSelectChannel = (channel: Channel) => {
     setActiveChannelId(channel.id);
+    setActiveView('channel');
     if (channel.type === 'voice') {
       setActiveVoiceChannel(channel);
     }
@@ -246,17 +352,18 @@ export function App() {
       prev.map((s) => (s.id === activeServer.id ? { ...s, channels: [...s.channels, newChannel] } : s))
     );
     setActiveChannelId(newChannel.id);
+    setActiveView('channel');
     if (type === 'voice') {
       setActiveVoiceChannel(newChannel);
     }
   };
 
-  // Handle Create Server
+  // Handle Create Server / Project
   const handleCreateServer = (name: string, iconUrl: string) => {
     const newServerId = `srv_${Date.now()}`;
     const defaultChannels: Channel[] = [
       { id: `c_${Date.now()}_1`, server_id: newServerId, name: 'geral', type: 'text', category: 'TEXTO' },
-      { id: `c_${Date.now()}_2`, server_id: newServerId, name: 'Voz Geral', type: 'voice', category: 'VOZ' },
+      { id: `c_${Date.now()}_2`, server_id: newServerId, name: 'Reunião do Projeto 🎙️', type: 'voice', category: 'VOZ' },
     ];
 
     const newServer: Server = {
@@ -270,6 +377,76 @@ export function App() {
     setServers((prev) => [...prev, newServer]);
     setActiveServerId(newServerId);
     setActiveChannelId(defaultChannels[0].id);
+    setActiveView('channel');
+  };
+
+  // Storage Handlers
+  const handleCreateFolder = (name: string, parentId: string | null) => {
+    const newFolder: FileFolder = {
+      id: `f_${Date.now()}`,
+      project_id: activeServerId || 'srv_dezcord',
+      name,
+      parent_id: parentId,
+      created_at: new Date().toISOString(),
+    };
+    setFolders((prev) => [...prev, newFolder]);
+  };
+
+  const handleDeleteFolder = (folderId: string) => {
+    setFolders((prev) => prev.filter((f) => f.id !== folderId));
+    setFiles((prev) => prev.filter((file) => file.folder_id !== folderId));
+  };
+
+  const handleUploadFile = (fileData: {
+    name: string;
+    size: number;
+    mimeType: string;
+    url: string;
+    folderId: string | null;
+  }) => {
+    const newFile: ProjectFile = {
+      id: `file_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      project_id: activeServerId || 'srv_dezcord',
+      folder_id: fileData.folderId,
+      name: fileData.name,
+      size: fileData.size,
+      mime_type: fileData.mimeType,
+      url: fileData.url,
+      uploaded_by: currentUser,
+      created_at: new Date().toISOString(),
+    };
+    setFiles((prev) => [newFile, ...prev]);
+  };
+
+  const handleDeleteFile = (fileId: string) => {
+    setFiles((prev) => prev.filter((f) => f.id !== fileId));
+  };
+
+  const handleShareFileToChat = (file: ProjectFile) => {
+    const isImage = file.mime_type.startsWith('image/');
+    const content = `📁 Compartilhou o arquivo **${file.name}** do armazenamento interno do projeto!`;
+    const attachments = isImage ? [file.url] : undefined;
+
+    handleSendMessage(content, attachments);
+    setActiveView('channel');
+  };
+
+  // Task Handlers
+  const handleCreateTask = (newTaskData: Omit<ProjectTask, 'id' | 'created_at'>) => {
+    const newTask: ProjectTask = {
+      id: `tsk_${Date.now()}`,
+      ...newTaskData,
+      created_at: new Date().toISOString(),
+    };
+    setTasks((prev) => [newTask, ...prev]);
+  };
+
+  const handleUpdateTaskStatus = (taskId: string, status: 'todo' | 'in_progress' | 'done') => {
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status } : t)));
+  };
+
+  const handleDeleteTask = (taskId: string) => {
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
   };
 
   // Active channel messages
@@ -277,12 +454,13 @@ export function App() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#313338] text-[#dbdee1] font-sans antialiased">
-      {/* 1. Server Sidebar (Far Left) */}
+      {/* 1. Project / Server Sidebar (Far Left) */}
       <ServerSidebar
         servers={servers}
         activeServerId={activeServerId}
         onSelectServer={(id) => {
           setActiveServerId(id);
+          setActiveView('channel');
           if (id) {
             const srv = servers.find((s) => s.id === id);
             if (srv && srv.channels.length > 0) {
@@ -295,11 +473,13 @@ export function App() {
         isSupabaseConnected={isSupabaseConnected}
       />
 
-      {/* 2. Channel Sidebar (Left Middle) */}
+      {/* 2. Channel & Project Tools Sidebar (Left Middle) */}
       <ChannelSidebar
         server={activeServer}
         activeChannelId={activeChannelId}
+        activeView={activeView}
         onSelectChannel={handleSelectChannel}
+        onSelectView={(v) => setActiveView(v)}
         currentUser={currentUser}
         activeVoiceChannel={activeVoiceChannel}
         isMuted={isMuted}
@@ -312,6 +492,7 @@ export function App() {
           setIsCreateChannelOpen(true);
         }}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenLogin={() => setIsLoginOpen(true)}
       />
 
       {/* 3. Main Center Content Area */}
@@ -321,10 +502,35 @@ export function App() {
           friends={sampleUsers}
           currentUser={currentUser}
           onStartChat={(_user) => {
-            // Select official server to chat or future DM
             setActiveServerId('srv_dezcord');
             setActiveChannelId('c_geral');
+            setActiveView('channel');
           }}
+        />
+      ) : activeServer && activeView === 'files' ? (
+        // Internal Storage View (Files, Folders, Previews)
+        <FileStorageView
+          projectId={activeServer.id}
+          projectName={activeServer.name}
+          folders={folders}
+          files={files}
+          currentUser={currentUser}
+          onCreateFolder={handleCreateFolder}
+          onDeleteFolder={handleDeleteFolder}
+          onUploadFile={handleUploadFile}
+          onDeleteFile={handleDeleteFile}
+          onShareToChat={handleShareFileToChat}
+        />
+      ) : activeServer && activeView === 'tasks' ? (
+        // Project Task Board (Kanban organization)
+        <ProjectTaskBoard
+          projectId={activeServer.id}
+          projectName={activeServer.name}
+          tasks={tasks}
+          currentUser={currentUser}
+          onCreateTask={handleCreateTask}
+          onUpdateTaskStatus={handleUpdateTaskStatus}
+          onDeleteTask={handleDeleteTask}
         />
       ) : activeChannel?.type === 'voice' ? (
         // Active Voice Channel Room (WebRTC / Grid View)
@@ -335,13 +541,12 @@ export function App() {
           onToggleMute={() => setIsMuted(!isMuted)}
           onDisconnect={() => {
             setActiveVoiceChannel(null);
-            // Revert to first text channel
             const firstText = activeServer?.channels.find((c) => c.type === 'text');
             if (firstText) setActiveChannelId(firstText.id);
           }}
         />
       ) : activeChannel ? (
-        // Text Channel Chat Area
+        // Text Channel Chat Area with Realtime
         <ChatArea
           channel={activeChannel}
           messages={currentMessages}
@@ -353,15 +558,17 @@ export function App() {
           onToggleMemberList={() => setShowMemberList(!showMemberList)}
           isSupabaseConnected={isSupabaseConnected}
           onOpenSupabaseConfig={() => setIsSettingsOpen(true)}
+          onOpenFilesView={() => setActiveView('files')}
+          isBotTyping={isBotTyping}
         />
       ) : (
         <div className="flex-1 flex items-center justify-center text-[#949ba4]">
-          Selecione um canal para começar
+          Selecione um canal ou ferramenta de projeto para começar
         </div>
       )}
 
-      {/* 4. Server Member List Sidebar (Far Right) */}
-      {activeServerId !== null && activeChannel?.type === 'text' && showMemberList && (
+      {/* 4. Server Member List Sidebar (Far Right - Optional & Toggleable) */}
+      {activeServerId !== null && activeView === 'channel' && activeChannel?.type === 'text' && showMemberList && (
         <MemberListSidebar
           members={sampleUsers}
           ownerId={activeServer?.owner_id || ''}
@@ -369,6 +576,13 @@ export function App() {
       )}
 
       {/* MODALS */}
+      <LoginModal
+        isOpen={isLoginOpen}
+        onClose={() => setIsLoginOpen(false)}
+        currentUser={currentUser}
+        onSaveUser={(updated) => setCurrentUser(updated)}
+      />
+
       <UserSettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}

@@ -11,7 +11,9 @@ import {
   Send,
   Trash2,
   Reply,
-  Database
+  Database,
+  Bot,
+  Sparkles
 } from 'lucide-react';
 
 interface ChatAreaProps {
@@ -25,11 +27,13 @@ interface ChatAreaProps {
   onToggleMemberList: () => void;
   isSupabaseConnected: boolean;
   onOpenSupabaseConfig: () => void;
+  onOpenFilesView?: () => void;
+  isBotTyping?: boolean;
 }
 
 const COMMON_EMOJIS = ['👍', '❤️', '🔥', '🎉', '🚀', '💀', '😂', '👀', '✨', '⚡'];
 
-export const ChatArea: React.FC<ChatAreaProps> = ({
+export const ChatArea = ({
   channel,
   messages,
   currentUser,
@@ -40,7 +44,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onToggleMemberList,
   isSupabaseConnected,
   onOpenSupabaseConfig,
-}) => {
+  onOpenFilesView,
+  isBotTyping = false,
+}: ChatAreaProps) => {
   const [inputText, setInputText] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
@@ -48,10 +54,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  // Auto-scroll to bottom on new message
+  // Auto-scroll to bottom on new message or bot typing
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
+  }, [messages.length, isBotTyping]);
 
   const handleSend = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -128,7 +134,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   return (
     <div className="flex-1 bg-[#313338] flex flex-col h-full overflow-hidden">
       {/* Channel Header */}
-      <div className="h-12 px-4 border-b border-[#1f2023] flex items-center justify-between text-white shadow-sm bg-[#313338] z-10">
+      <div className="h-14 px-4 border-b border-[#1f2023] flex items-center justify-between text-white shadow-sm bg-[#313338] z-10">
         <div className="flex items-center gap-3 overflow-hidden">
           <Hash size={24} className="text-[#80848e] shrink-0" />
           <span className="font-bold text-base text-white truncate">{channel.name}</span>
@@ -144,6 +150,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
         {/* Right Header Actions */}
         <div className="flex items-center gap-3 text-[#b5bac1]">
+          {/* Quick Files Access Button */}
+          {onOpenFilesView && (
+            <button
+              onClick={onOpenFilesView}
+              className="text-xs font-medium bg-[#1e1f22] hover:bg-[#2b2d31] text-[#949ba4] hover:text-white px-2.5 py-1 rounded transition"
+              title="Acessar Arquivos do Projeto"
+            >
+              📁 Arquivos
+            </button>
+          )}
+
           {/* Supabase Status Pill */}
           <button
             onClick={onOpenSupabaseConfig}
@@ -159,27 +176,27 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </button>
 
           <button title="Notificações" className="hover:text-white transition">
-            <Bell size={20} />
+            <Bell size={18} />
           </button>
           <button title="Mensagens Fixadas" className="hover:text-white transition">
-            <Pin size={20} />
+            <Pin size={18} />
           </button>
           <button
             onClick={onToggleMemberList}
-            title="Alternar Lista de Membros"
+            title="Alternar Lista de Usuários"
             className={`transition ${showMemberList ? 'text-white' : 'hover:text-white'}`}
           >
-            <Users size={20} />
+            <Users size={18} />
           </button>
 
           {/* Search Bar */}
           <div className="relative flex items-center">
             <input
               type="text"
-              placeholder="Buscar"
-              className="w-36 hover:w-56 focus:w-56 bg-[#1e1f22] text-xs px-2 py-1 pr-6 rounded text-white placeholder-[#949ba4] focus:outline-none transition-all duration-200"
+              placeholder="Buscar no canal..."
+              className="w-32 focus:w-48 bg-[#1e1f22] text-xs px-2.5 py-1 pr-6 rounded text-white placeholder-[#949ba4] focus:outline-none transition-all duration-200"
             />
-            <Search size={14} className="absolute right-2 text-[#949ba4] pointer-events-none" />
+            <Search size={13} className="absolute right-2 text-[#949ba4] pointer-events-none" />
           </div>
         </div>
       </div>
@@ -187,15 +204,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       {/* Messages Stream */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {/* Welcome Channel Banner */}
-        <div className="pt-8 pb-4 border-b border-[#35373c]/50">
-          <div className="w-16 h-16 rounded-full bg-[#404249] flex items-center justify-center mb-3">
-            <Hash size={36} className="text-white" />
+        <div className="pt-6 pb-4 border-b border-[#35373c]/40">
+          <div className="w-14 h-14 rounded-full bg-[#404249] flex items-center justify-center mb-3">
+            <Hash size={32} className="text-white" />
           </div>
-          <h2 className="text-2xl md:text-3xl font-bold text-white">
-            Bem-vindo a #{channel.name}!
+          <h2 className="text-2xl font-bold text-white">
+            Bem-vindo ao #{channel.name}!
           </h2>
-          <p className="text-[#949ba4] text-sm mt-1">
-            Este é o início do canal #{channel.name}.
+          <p className="text-[#949ba4] text-xs mt-1">
+            Este é o canal oficial de comunicação de #{channel.name}. Use <code className="text-[#5865f2]">/ia</code> para perguntar ao Dézcord Bot!
           </p>
         </div>
 
@@ -210,7 +227,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           return (
             <div
               key={message.id}
-              className="group relative flex gap-4 px-2 py-1 -mx-2 rounded hover:bg-[#2e3035] transition duration-150"
+              className="group relative flex gap-3 px-2 py-1.5 -mx-2 rounded hover:bg-[#2e3035] transition duration-150"
             >
               {/* Message Actions Toolbar (Hover) */}
               <div className="absolute right-3 -top-3 hidden group-hover:flex items-center bg-[#313338] border border-[#232428] rounded-md shadow-md overflow-hidden z-10">
@@ -296,8 +313,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     {message.author.display_name}
                   </span>
                   {message.author.username.includes('bot') && (
-                    <span className="bg-[#5865f2] text-white text-[10px] font-bold px-1 rounded uppercase">
-                      BOT
+                    <span className="bg-[#5865f2] text-white text-[9px] font-bold px-1 rounded uppercase flex items-center gap-0.5">
+                      <Bot size={10} />
+                      <span>BOT IA</span>
                     </span>
                   )}
                   <span className="text-[11px] text-[#949ba4]">{timeString}</span>
@@ -319,7 +337,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         <img
                           src={att}
                           alt="Anexo"
-                          className="w-full h-full object-contain cursor-pointer"
+                          className="w-full h-full object-contain cursor-pointer hover:opacity-95 transition"
                         />
                       </div>
                     ))}
@@ -352,6 +370,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             </div>
           );
         })}
+
+        {/* Bot Typing Indicator */}
+        {isBotTyping && (
+          <div className="flex items-center gap-2 text-xs text-[#949ba4] italic py-1">
+            <Bot size={14} className="text-[#5865f2] animate-spin" />
+            <span>DÉZ BOT IA está digitando...</span>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -376,7 +403,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           <div className="w-14 h-14 rounded bg-[#1e1f22] overflow-hidden relative">
             <img src={previewAttachment} alt="Preview" className="w-full h-full object-cover" />
           </div>
-          <div className="flex-1 text-xs text-[#dbdee1]">Imagem pronta para enviar</div>
+          <div className="flex-1 text-xs text-[#dbdee1]">Imagem anexada pronta para enviar</div>
           <button
             onClick={() => setPreviewAttachment(null)}
             className="text-xs text-[#f23f43] hover:underline"
@@ -386,13 +413,38 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         </div>
       )}
 
+      {/* Quick Bot Prompt Chips */}
+      <div className="px-4 pt-1 flex items-center gap-2 text-[11px] text-[#949ba4] overflow-x-auto no-scrollbar">
+        <span className="flex items-center gap-1 text-[#5865f2] font-semibold shrink-0">
+          <Sparkles size={12} /> Sugestões:
+        </span>
+        <button
+          onClick={() => setInputText('/ia Como organizar os arquivos deste projeto?')}
+          className="bg-[#2b2d31] hover:bg-[#35373c] text-[#dbdee1] px-2 py-0.5 rounded truncate transition shrink-0"
+        >
+          💡 /ia Dicas de organização
+        </button>
+        <button
+          onClick={() => setInputText('/resumo')}
+          className="bg-[#2b2d31] hover:bg-[#35373c] text-[#dbdee1] px-2 py-0.5 rounded truncate transition shrink-0"
+        >
+          📊 /resumo do projeto
+        </button>
+        <button
+          onClick={() => setInputText('/ajuda')}
+          className="bg-[#2b2d31] hover:bg-[#35373c] text-[#dbdee1] px-2 py-0.5 rounded truncate transition shrink-0"
+        >
+          ❓ /ajuda
+        </button>
+      </div>
+
       {/* Message Input Box */}
-      <div className="px-4 pb-6 pt-1">
+      <div className="px-4 pb-5 pt-2">
         <div className="bg-[#383a40] rounded-lg flex items-center px-4 py-2.5 gap-3">
           {/* File Upload Button */}
           <button
             onClick={() => fileInputRef.current?.click()}
-            title="Enviar um arquivo ou imagem"
+            title="Enviar uma imagem ou anexo"
             className="text-[#b5bac1] hover:text-white transition shrink-0"
           >
             <PlusCircle size={22} />
@@ -411,7 +463,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={`Conversar em #${channel.name}`}
+            placeholder={`Conversar em #${channel.name} (ou /ia para assistência)`}
             className="flex-1 bg-transparent text-sm text-[#dbdee1] placeholder-[#80848e] focus:outline-none"
           />
 

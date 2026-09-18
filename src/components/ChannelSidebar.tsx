@@ -13,12 +13,17 @@ import {
   Radio,
   UserPlus,
   Shield,
+  HardDrive,
+  CheckSquare,
+  Edit3
 } from 'lucide-react';
 
 interface ChannelSidebarProps {
   server: Server | null;
   activeChannelId: string;
+  activeView: 'channel' | 'files' | 'tasks';
   onSelectChannel: (channel: Channel) => void;
+  onSelectView: (view: 'channel' | 'files' | 'tasks') => void;
   currentUser: UserProfile;
   activeVoiceChannel: Channel | null;
   isMuted: boolean;
@@ -28,12 +33,15 @@ interface ChannelSidebarProps {
   onDisconnectVoice: () => void;
   onOpenCreateChannel: (type: 'text' | 'voice') => void;
   onOpenSettings: () => void;
+  onOpenLogin: () => void;
 }
 
-export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
+export const ChannelSidebar = ({
   server,
   activeChannelId,
+  activeView,
   onSelectChannel,
+  onSelectView,
   currentUser,
   activeVoiceChannel,
   isMuted,
@@ -43,7 +51,8 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
   onDisconnectVoice,
   onOpenCreateChannel,
   onOpenSettings,
-}) => {
+  onOpenLogin,
+}: ChannelSidebarProps) => {
   const [isServerMenuOpen, setIsServerMenuOpen] = useState(false);
 
   if (!server) {
@@ -85,7 +94,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
         </div>
 
         {/* User bar at bottom */}
-        {renderUserBar(currentUser, isMuted, isDeafened, onToggleMute, onToggleDeafen, onOpenSettings)}
+        {renderUserBar(currentUser, isMuted, isDeafened, onToggleMute, onToggleDeafen, onOpenSettings, onOpenLogin)}
       </div>
     );
   }
@@ -128,14 +137,46 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
             }}
             className="w-full flex items-center justify-between px-2 py-1.5 text-xs text-[#949ba4] hover:bg-[#35373c] hover:text-white rounded transition"
           >
-            <span>Configurações do Servidor</span>
+            <span>Configurações do Projeto</span>
             <Shield size={14} />
           </button>
         </div>
       )}
 
-      {/* Channels List */}
+      {/* Channels & Project Tools List */}
       <div className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
+        {/* PROJECT ORGANIZATION CATEGORY */}
+        <div>
+          <div className="px-2 mb-1 text-[11px] font-bold tracking-wider uppercase text-[#949ba4]">
+            ORGANIZAÇÃO DO PROJETO
+          </div>
+          <div className="space-y-0.5">
+            <button
+              onClick={() => onSelectView('files')}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition group ${
+                activeView === 'files'
+                  ? 'bg-[#404249] text-white font-medium'
+                  : 'text-[#949ba4] hover:bg-[#35373c] hover:text-[#dbdee1]'
+              }`}
+            >
+              <HardDrive size={18} className={activeView === 'files' ? 'text-[#3ecf8e]' : 'text-[#80848e]'} />
+              <span className="truncate">Arquivos & Documentos</span>
+            </button>
+
+            <button
+              onClick={() => onSelectView('tasks')}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition group ${
+                activeView === 'tasks'
+                  ? 'bg-[#404249] text-white font-medium'
+                  : 'text-[#949ba4] hover:bg-[#35373c] hover:text-[#dbdee1]'
+              }`}
+            >
+              <CheckSquare size={18} className={activeView === 'tasks' ? 'text-[#5865f2]' : 'text-[#80848e]'} />
+              <span className="truncate">Quadro de Tarefas</span>
+            </button>
+          </div>
+        </div>
+
         {/* TEXT CHANNELS CATEGORY */}
         <div>
           <div className="flex items-center justify-between px-2 mb-1 group text-[#949ba4] hover:text-[#dbdee1] cursor-pointer">
@@ -151,7 +192,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
 
           <div className="space-y-0.5">
             {textChannels.map((channel) => {
-              const isActive = activeChannelId === channel.id;
+              const isActive = activeView === 'channel' && activeChannelId === channel.id;
               return (
                 <button
                   key={channel.id}
@@ -249,7 +290,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
       )}
 
       {/* User bar at bottom */}
-      {renderUserBar(currentUser, isMuted, isDeafened, onToggleMute, onToggleDeafen, onOpenSettings)}
+      {renderUserBar(currentUser, isMuted, isDeafened, onToggleMute, onToggleDeafen, onOpenSettings, onOpenLogin)}
     </div>
   );
 };
@@ -260,7 +301,8 @@ function renderUserBar(
   isDeafened: boolean,
   onToggleMute: () => void,
   onToggleDeafen: () => void,
-  onOpenSettings: () => void
+  onOpenSettings: () => void,
+  onOpenLogin: () => void
 ) {
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -276,11 +318,12 @@ function renderUserBar(
   };
 
   return (
-    <div className="h-[52px] bg-[#232428] px-2 flex items-center justify-between border-t border-[#1f2023]">
-      {/* Profile & Avatar */}
+    <div className="h-[54px] bg-[#232428] px-2 flex items-center justify-between border-t border-[#1f2023]">
+      {/* Profile & Avatar (Clicking opens Quick Login / Profile Edit) */}
       <div
-        onClick={onOpenSettings}
-        className="flex items-center gap-2 p-1 rounded hover:bg-[#35373c] cursor-pointer transition max-w-[130px]"
+        onClick={onOpenLogin}
+        className="flex items-center gap-2 p-1 rounded hover:bg-[#35373c] cursor-pointer transition max-w-[130px] group"
+        title="Clique para editar nome e avatar"
       >
         <div className="relative shrink-0">
           <img
@@ -295,8 +338,9 @@ function renderUserBar(
           />
         </div>
         <div className="truncate">
-          <div className="text-xs font-semibold text-white leading-tight truncate">
-            {currentUser.display_name}
+          <div className="text-xs font-semibold text-white leading-tight truncate flex items-center gap-1">
+            <span>{currentUser.display_name}</span>
+            <Edit3 size={10} className="opacity-0 group-hover:opacity-100 text-[#5865f2] shrink-0 transition" />
           </div>
           <div className="text-[11px] text-[#949ba4] leading-tight truncate">
             {currentUser.custom_status || `@${currentUser.username}`}
