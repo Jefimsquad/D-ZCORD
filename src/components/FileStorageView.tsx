@@ -16,7 +16,8 @@ import {
   ChevronRight,
   Search,
   X,
-  HardDrive
+  HardDrive,
+  Users
 } from 'lucide-react';
 
 interface FileStorageViewProps {
@@ -30,6 +31,8 @@ interface FileStorageViewProps {
   onUploadFile: (file: { name: string; size: number; mimeType: string; url: string; folderId: string | null }) => void;
   onDeleteFile: (fileId: string) => void;
   onShareToChat?: (file: ProjectFile) => void;
+  showMemberList?: boolean;
+  onToggleMemberList?: () => void;
 }
 
 type FilterType = 'all' | 'images' | 'documents';
@@ -45,6 +48,8 @@ export const FileStorageView = ({
   onUploadFile,
   onDeleteFile,
   onShareToChat,
+  showMemberList,
+  onToggleMemberList,
 }: FileStorageViewProps) => {
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterType>('all');
@@ -247,6 +252,19 @@ export const FileStorageView = ({
             onChange={(e) => handleFileUpload(e.target.files)}
             className="hidden"
           />
+
+          {/* Member List Toggle */}
+          {onToggleMemberList && (
+            <button
+              onClick={onToggleMemberList}
+              title={showMemberList ? 'Ocultar Lista de Usuários' : 'Exibir Lista de Usuários'}
+              className={`p-1.5 rounded transition ${
+                showMemberList ? 'text-white bg-[#404249]' : 'text-[#b5bac1] hover:bg-[#35373c] hover:text-white'
+              }`}
+            >
+              <Users size={18} />
+            </button>
+          )}
         </div>
       </div>
 

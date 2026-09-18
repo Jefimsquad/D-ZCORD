@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ProjectTask, UserProfile } from '../types';
-import { CheckCircle2, Clock, Circle, Plus, Trash2, CheckSquare } from 'lucide-react';
+import { CheckCircle2, Clock, Circle, Plus, Trash2, CheckSquare, Users } from 'lucide-react';
 
 interface ProjectTaskBoardProps {
   projectId: string;
@@ -10,6 +10,8 @@ interface ProjectTaskBoardProps {
   onCreateTask: (task: Omit<ProjectTask, 'id' | 'created_at'>) => void;
   onUpdateTaskStatus: (taskId: string, status: 'todo' | 'in_progress' | 'done') => void;
   onDeleteTask: (taskId: string) => void;
+  showMemberList?: boolean;
+  onToggleMemberList?: () => void;
 }
 
 export const ProjectTaskBoard = ({
@@ -20,6 +22,8 @@ export const ProjectTaskBoard = ({
   onCreateTask,
   onUpdateTaskStatus,
   onDeleteTask,
+  showMemberList,
+  onToggleMemberList,
 }: ProjectTaskBoardProps) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -72,13 +76,27 @@ export const ProjectTaskBoard = ({
           </span>
         </div>
 
-        <button
-          onClick={() => setIsAdding(true)}
-          className="flex items-center gap-1.5 bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-semibold px-3 py-1.5 rounded transition shadow"
-        >
-          <Plus size={16} />
-          <span>Nova Tarefa</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsAdding(true)}
+            className="flex items-center gap-1.5 bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-semibold px-3 py-1.5 rounded transition shadow"
+          >
+            <Plus size={16} />
+            <span>Nova Tarefa</span>
+          </button>
+
+          {onToggleMemberList && (
+            <button
+              onClick={onToggleMemberList}
+              title={showMemberList ? 'Ocultar Lista de Usuários' : 'Exibir Lista de Usuários'}
+              className={`p-1.5 rounded transition ${
+                showMemberList ? 'text-white bg-[#404249]' : 'text-[#b5bac1] hover:bg-[#35373c] hover:text-white'
+              }`}
+            >
+              <Users size={18} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Task Columns */}

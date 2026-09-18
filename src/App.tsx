@@ -520,6 +520,8 @@ Recomendo dividir o fluxo em:
           onUploadFile={handleUploadFile}
           onDeleteFile={handleDeleteFile}
           onShareToChat={handleShareFileToChat}
+          showMemberList={showMemberList}
+          onToggleMemberList={() => setShowMemberList(!showMemberList)}
         />
       ) : activeServer && activeView === 'tasks' ? (
         // Project Task Board (Kanban organization)
@@ -531,6 +533,8 @@ Recomendo dividir o fluxo em:
           onCreateTask={handleCreateTask}
           onUpdateTaskStatus={handleUpdateTaskStatus}
           onDeleteTask={handleDeleteTask}
+          showMemberList={showMemberList}
+          onToggleMemberList={() => setShowMemberList(!showMemberList)}
         />
       ) : activeChannel?.type === 'voice' ? (
         // Active Voice Channel Room (WebRTC / Grid View)
@@ -568,7 +572,7 @@ Recomendo dividir o fluxo em:
       )}
 
       {/* 4. Server Member List Sidebar (Far Right - Optional & Toggleable) */}
-      {activeServerId !== null && activeView === 'channel' && activeChannel?.type === 'text' && showMemberList && (
+      {activeServerId !== null && showMemberList && (
         <MemberListSidebar
           members={sampleUsers}
           ownerId={activeServer?.owner_id || ''}
