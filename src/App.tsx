@@ -33,7 +33,21 @@ export function App() {
   // Projects / Servers
   const [servers, setServers] = useState<Server[]>(() => {
     const saved = localStorage.getItem('dezcord_servers');
-    return saved ? JSON.parse(saved) : initialServers;
+    if (!saved) return initialServers;
+    try {
+      const parsed: Server[] = JSON.parse(saved);
+      const dezcord = parsed.find((s) => s.id === 'srv_dezcord');
+      if (dezcord) {
+        initialServers[0].channels.forEach((ch) => {
+          if (!dezcord.channels.some((c) => c.id === ch.id || c.name === ch.name)) {
+            dezcord.channels.push(ch);
+          }
+        });
+      }
+      return parsed;
+    } catch {
+      return initialServers;
+    }
   });
 
   const [activeServerId, setActiveServerId] = useState<string | null>('srv_dezcord');
@@ -46,7 +60,13 @@ export function App() {
   // Messages map by channel ID
   const [messagesMap, setMessagesMap] = useState<Record<string, Message[]>>(() => {
     const saved = localStorage.getItem('dezcord_messages');
-    return saved ? JSON.parse(saved) : initialMessages;
+    if (!saved) return initialMessages;
+    try {
+      const parsed = JSON.parse(saved);
+      return { ...initialMessages, ...parsed };
+    } catch {
+      return initialMessages;
+    }
   });
 
   // Project Folders & Files

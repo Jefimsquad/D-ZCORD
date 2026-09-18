@@ -70,8 +70,8 @@ export const initialServers: Server[] = [
     description: 'Projeto principal do DÉZCORD: Comunicação, Tarefas e Arquivos.',
     channels: [
       { id: 'c_geral', server_id: 'srv_dezcord', name: 'geral', type: 'text', category: 'TEXTO', topic: 'Canal principal de comunicação do projeto' },
-      { id: 'c_dev', server_id: 'srv_dezcord', name: 'desenvolvimento', type: 'text', category: 'TEXTO', topic: 'Discussões técnicas, commits e arquitetura' },
-      { id: 'c_design', server_id: 'srv_dezcord', name: 'design-feedback', type: 'text', category: 'TEXTO', topic: 'Compartilhamento de assets e telas' },
+      { id: 'c_dev', server_id: 'srv_dezcord', name: 'dev', type: 'text', category: 'TEXTO', topic: 'Discussões técnicas de desenvolvimento, código e Supabase' },
+      { id: 'c_ideias', server_id: 'srv_dezcord', name: 'ideias', type: 'text', category: 'TEXTO', topic: 'Brainstorming de novas features, UI e automações' },
       { id: 'c_voz_reuniao', server_id: 'srv_dezcord', name: 'Reunião Diária 🎙️', type: 'voice', category: 'VOZ' },
       { id: 'c_voz_foco', server_id: 'srv_dezcord', name: 'Sala Foco & Pair 💻', type: 'voice', category: 'VOZ' }
     ]
@@ -235,6 +235,29 @@ export const initialMessages: Record<string, Message[]> = {
       content: '```typescript\n// DÉZCORD: Comunicação + Armazenamento + Organização\nconst workspace = {\n  chat: "Realtime Supabase",\n  storage: "Pastas e Arquivos Internos",\n  tasks: "Kanban Board Integrado",\n  voice: "WebRTC Audio / Video"\n};\n```\nO sistema está modular e dinâmico!',
       created_at: new Date(Date.now() - 1200000).toISOString(),
       reactions: [{ emoji: '💻', count: 4, users: ['usr_carlos'] }]
+    }
+  ],
+  'c_ideias': [
+    {
+      id: 'msg_ideias_1',
+      channel_id: 'c_ideias',
+      user_id: 'usr_aline',
+      author: sampleUsers[2],
+      content: '💡 **Sugestões para o DÉZCORD:**\n1. Atalhos de teclado no chat (`Ctrl + K` para busca rápida)\n2. Integração com Webhook do GitHub para commits automáticos\n3. Suporte a comandos de voz!',
+      created_at: new Date(Date.now() - 900000).toISOString(),
+      reactions: [
+        { emoji: '💡', count: 4, users: ['usr_me', 'usr_carlos'] },
+        { emoji: '🚀', count: 3, users: ['usr_me'] }
+      ]
+    },
+    {
+      id: 'msg_ideias_2',
+      channel_id: 'c_ideias',
+      user_id: 'usr_dez',
+      author: sampleUsers[1],
+      content: '🤖 Adorei as ideias! Já configurei a automação para criar tarefas no Kanban digitando `/tarefa [título]` aqui no chat.',
+      created_at: new Date(Date.now() - 300000).toISOString(),
+      reactions: [{ emoji: '⚡', count: 2, users: ['usr_aline'] }]
     }
   ]
 };
