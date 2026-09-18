@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+:root {
+  --discord-server-bg: #1e1f22;
+  --discord-sidebar-bg: #2b2d31;
+  --discord-chat-bg: #313338;
+  --discord-channel-hover: #35373c;
+  --discord-channel-active: #404249;
+  --discord-user-bar: #232428;
+  --discord-member-bg: #2b2d31;
+  --discord-blurple: #5865f2;
+  --discord-blurple-hover: #4752c4;
+  --discord-green: #23a55a;
+  --discord-yellow: #f0b232;
+  --discord-red: #f23f43;
+  --discord-text-normal: #dbdee1;
+  --discord-text-muted: #949ba4;
+  --discord-text-header: #f2f3f5;
+  --discord-border: #3f4147;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #313338;
+  color: #dbdee1;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  user-select: none;
+}
+
+/* Custom Discord Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #2b2d31;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1a1b1e;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #111214;
+}
+
+/* Pulse animation for voice speaking indicator */
+@keyframes speakingPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(35, 165, 90, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(35, 165, 90, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(35, 165, 90, 0);
+  }
+}
+
+.speaking-ring {
+  box-shadow: 0 0 0 3px #23a55a;
+  animation: speakingPulse 1.8s infinite;
+}
