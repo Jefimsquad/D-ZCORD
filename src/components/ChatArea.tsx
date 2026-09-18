@@ -183,8 +183,10 @@ export const ChatArea = ({
           </button>
           <button
             onClick={onToggleMemberList}
-            title="Alternar Lista de Usuários"
-            className={`transition ${showMemberList ? 'text-white' : 'hover:text-white'}`}
+            title={showMemberList ? 'Ocultar Lista de Usuários' : 'Exibir Lista de Usuários'}
+            className={`p-1.5 rounded transition ${
+              showMemberList ? 'text-white bg-[#404249]' : 'text-[#b5bac1] hover:bg-[#35373c] hover:text-white'
+            }`}
           >
             <Users size={18} />
           </button>

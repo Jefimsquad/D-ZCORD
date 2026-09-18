@@ -36,7 +36,7 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
           className={`w-12 h-12 flex items-center justify-center transition-all duration-200 ${
             activeServerId === null
               ? 'bg-[#5865f2] rounded-[16px] text-white shadow-lg'
-              : 'bg-[#313338] hover:bg-[#5865f2] rounded-[24px] hover:rounded-[16px] text-[#dbdee1] hover:text-white'
+              : 'bg-[#313338] hover:bg-[#5865f2] rounded-full hover:rounded-[16px] text-[#dbdee1] hover:text-white'
           }`}
         >
           {/* Stylized 'D' Icon for DÉZCORD */}
@@ -65,7 +65,7 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
                 className={`w-12 h-12 flex items-center justify-center overflow-hidden transition-all duration-200 ${
                   isActive
                     ? 'rounded-[16px] ring-2 ring-white/20'
-                    : 'rounded-[24px] hover:rounded-[16px] bg-[#313338] hover:bg-[#5865f2]'
+                    : 'rounded-full hover:rounded-[16px] bg-[#313338] hover:bg-[#5865f2]'
                 }`}
               >
                 {server.icon_url ? (
@@ -94,8 +94,8 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
           <div className="absolute left-0 w-1 bg-white rounded-r-full h-0 group-hover:h-5 transition-all duration-200" />
           <button
             onClick={onOpenCreateServer}
-            title="Adicionar um Servidor"
-            className="w-12 h-12 rounded-[24px] hover:rounded-[16px] bg-[#313338] hover:bg-[#23a55a] text-[#23a55a] hover:text-white flex items-center justify-center transition-all duration-200"
+            title="Adicionar um Servidor/Projeto"
+            className="w-12 h-12 rounded-full hover:rounded-[16px] bg-[#313338] hover:bg-[#23a55a] text-[#23a55a] hover:text-white flex items-center justify-center transition-all duration-200"
           >
             <Plus size={24} />
           </button>
@@ -105,8 +105,8 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
         <div className="relative group flex items-center justify-center w-full">
           <div className="absolute left-0 w-1 bg-white rounded-r-full h-0 group-hover:h-5 transition-all duration-200" />
           <button
-            title="Explorar Servidores Descoberta"
-            className="w-12 h-12 rounded-[24px] hover:rounded-[16px] bg-[#313338] hover:bg-[#23a55a] text-[#dbdee1] hover:text-white flex items-center justify-center transition-all duration-200"
+            title="Explorar Projetos"
+            className="w-12 h-12 rounded-full hover:rounded-[16px] bg-[#313338] hover:bg-[#23a55a] text-[#dbdee1] hover:text-white flex items-center justify-center transition-all duration-200"
           >
             <Compass size={22} />
           </button>
