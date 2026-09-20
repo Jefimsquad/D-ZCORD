@@ -17,7 +17,8 @@ import {
   Search,
   X,
   HardDrive,
-  Users
+  Users,
+  Menu
 } from 'lucide-react';
 
 interface FileStorageViewProps {
@@ -33,6 +34,7 @@ interface FileStorageViewProps {
   onShareToChat?: (file: ProjectFile) => void;
   showMemberList?: boolean;
   onToggleMemberList?: () => void;
+  onOpenChannelList?: () => void;
 }
 
 type FilterType = 'all' | 'images' | 'documents';
@@ -50,6 +52,7 @@ export const FileStorageView = ({
   onShareToChat,
   showMemberList,
   onToggleMemberList,
+  onOpenChannelList,
 }: FileStorageViewProps) => {
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterType>('all');
@@ -165,9 +168,18 @@ export const FileStorageView = ({
       )}
 
       {/* Header Bar */}
-      <div className="h-14 px-6 border-b border-[#1f2023] flex items-center justify-between shadow-sm bg-[#313338]">
+      <div className="h-14 px-3 md:px-6 border-b border-[#1f2023] flex items-center justify-between gap-2 shadow-sm bg-[#313338]">
         {/* Breadcrumb Navigation */}
-        <div className="flex items-center gap-2 overflow-x-auto text-sm text-[#949ba4]">
+        <div className="flex items-center gap-2 overflow-x-auto text-sm text-[#949ba4] min-w-0">
+          {onOpenChannelList && (
+            <button
+              onClick={onOpenChannelList}
+              title="Lista de canais"
+              className="md:hidden text-[#b5bac1] hover:text-white transition shrink-0"
+            >
+              <Menu size={22} />
+            </button>
+          )}
           <HardDrive size={18} className="text-[#5865f2] shrink-0" />
           {getBreadcrumbs().map((crumb, idx, arr) => (
             <div key={idx} className="flex items-center gap-1.5 shrink-0">

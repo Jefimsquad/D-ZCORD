@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ProjectTask, UserProfile } from '../types';
-import { CheckCircle2, Clock, Circle, Plus, Trash2, CheckSquare, Users } from 'lucide-react';
+import { CheckCircle2, Clock, Circle, Plus, Trash2, CheckSquare, Users, Menu } from 'lucide-react';
 
 interface ProjectTaskBoardProps {
   projectId: string;
@@ -12,6 +12,7 @@ interface ProjectTaskBoardProps {
   onDeleteTask: (taskId: string) => void;
   showMemberList?: boolean;
   onToggleMemberList?: () => void;
+  onOpenChannelList?: () => void;
 }
 
 export const ProjectTaskBoard = ({
@@ -24,6 +25,7 @@ export const ProjectTaskBoard = ({
   onDeleteTask,
   showMemberList,
   onToggleMemberList,
+  onOpenChannelList,
 }: ProjectTaskBoardProps) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -67,22 +69,31 @@ export const ProjectTaskBoard = ({
   return (
     <div className="flex-1 bg-[#313338] flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="h-14 px-6 border-b border-[#1f2023] flex items-center justify-between shadow-sm bg-[#313338]">
-        <div className="flex items-center gap-2 text-white font-bold text-base">
-          <CheckSquare size={20} className="text-[#5865f2]" />
-          <span>Quadro de Tarefas — {projectName}</span>
-          <span className="text-xs font-normal text-[#949ba4] bg-[#1e1f22] px-2 py-0.5 rounded-full">
+      <div className="h-14 px-3 md:px-6 border-b border-[#1f2023] flex items-center justify-between gap-2 shadow-sm bg-[#313338]">
+        <div className="flex items-center gap-2 text-white font-bold text-base min-w-0">
+          {onOpenChannelList && (
+            <button
+              onClick={onOpenChannelList}
+              title="Lista de canais"
+              className="md:hidden text-[#b5bac1] hover:text-white transition shrink-0"
+            >
+              <Menu size={22} />
+            </button>
+          )}
+          <CheckSquare size={20} className="text-[#5865f2] shrink-0" />
+          <span className="truncate">Quadro de Tarefas <span className="hidden sm:inline">— {projectName}</span></span>
+          <span className="hidden sm:inline text-xs font-normal text-[#949ba4] bg-[#1e1f22] px-2 py-0.5 rounded-full shrink-0">
             {projectTasks.length} tarefas
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 md:gap-3 shrink-0">
           <button
             onClick={() => setIsAdding(true)}
             className="flex items-center gap-1.5 bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-semibold px-3 py-1.5 rounded transition shadow"
           >
             <Plus size={16} />
-            <span>Nova Tarefa</span>
+            <span className="hidden sm:inline">Nova Tarefa</span>
           </button>
 
           {onToggleMemberList && (

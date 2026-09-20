@@ -23,6 +23,10 @@ import { FileStorageView } from './components/FileStorageView';
 import { ProjectTaskBoard } from './components/ProjectTaskBoard';
 import { LoginModal } from './components/LoginModal';
 import { AuthScreen } from './components/AuthScreen';
+import { useVoicePresence } from './hooks/useVoicePresence';
+import { useVoiceCall } from './hooks/useVoiceCall';
+import { RemoteAudioEl } from './components/VoiceRoom';
+import { NO_MEDIA, type LocalMediaFlags } from './lib/voice';
 
 export function App() {
   // Current user (editable locally)
@@ -90,7 +94,10 @@ export function App() {
   // Audio / UI State
   const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
-  const [showMemberList, setShowMemberList] = useState(true);
+  const [showMemberList, setShowMemberList] = useState(
+    () => typeof window === 'undefined' || window.innerWidth >= 768
+  );
+  const [showChannelsMobile, setShowChannelsMobile] = useState(false);
   const [isBotTyping, setIsBotTyping] = useState(false);
 
   // Modals state
@@ -349,6 +356,37 @@ export function App() {
   const activeServer = servers.find((s) => s.id === activeServerId) || null;
   const activeChannel = activeServer?.channels.find((c) => c.id === activeChannelId) || null;
 
+  // Presença de voz em tempo real (quem está em cada call)
+  const voiceChannelIds = activeServer
+    ? activeServer.channels.filter((c) => c.type === 'voice').map((c) => c.id)
+    : [];
+  // Flags de mídia local (câmera/tela) para publicar na presença
+  const [voiceMedia, setVoiceMedia] = useState<LocalMediaFlags>(NO_MEDIA);
+
+  const voicePresence = useVoicePresence(
+    voiceChannelIds,
+    currentUser,
+    isMuted,
+    isSupabaseConnected && authed,
+    activeVoiceChannel?.id || null,
+    voiceMedia
+  );
+
+  // Reseta flags de mídia ao sair da call
+  useEffect(() => {
+    if (!activeVoiceChannel) setVoiceMedia(NO_MEDIA);
+  }, [activeVoiceChannel]);
+
+  // Call de voz viva em segundo plano (mesmo navegando nos canais)
+  const voiceCall = useVoiceCall(
+    activeVoiceChannel?.id || '',
+    currentUser,
+    isMuted,
+    isSupabaseConnected && authed && !!activeVoiceChannel,
+    (activeVoiceChannel ? voicePresence[activeVoiceChannel.id] : undefined) || [],
+    (flags) => setVoiceMedia(flags)
+  );
+
   // Handle Send Message & Smart AI DézBot Automation
   const handleSendMessage = async (content: string, attachments?: string[]) => {
     if (!activeChannel) return;
@@ -517,6 +555,7 @@ Recomendo dividir o fluxo em:
   const handleSelectChannel = (channel: Channel) => {
     setActiveChannelId(channel.id);
     setActiveView('channel');
+    setShowChannelsMobile(false);
     if (channel.type === 'voice') {
       setActiveVoiceChannel(channel);
     }
@@ -672,26 +711,64 @@ Recomendo dividir o fluxo em:
       />
 
       {/* 2. Channel & Project Tools Sidebar (Left Middle) */}
-      <ChannelSidebar
-        server={activeServer}
-        activeChannelId={activeChannelId}
-        activeView={activeView}
-        onSelectChannel={handleSelectChannel}
-        onSelectView={(v) => setActiveView(v)}
-        currentUser={currentUser}
-        activeVoiceChannel={activeVoiceChannel}
-        isMuted={isMuted}
-        isDeafened={isDeafened}
-        onToggleMute={() => setIsMuted(!isMuted)}
-        onToggleDeafen={() => setIsDeafened(!isDeafened)}
-        onDisconnectVoice={() => setActiveVoiceChannel(null)}
-        onOpenCreateChannel={(type) => {
-          setCreateChannelType(type);
-          setIsCreateChannelOpen(true);
-        }}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenLogin={() => setIsLoginOpen(true)}
-      />
+      {/* Desktop: fixa | Mobile: gaveta sobre o conteúdo */}
+      <div className="hidden md:block h-full shrink-0">
+        <ChannelSidebar
+          server={activeServer}
+          activeChannelId={activeChannelId}
+          activeView={activeView}
+          onSelectChannel={handleSelectChannel}
+          onSelectView={(v) => setActiveView(v)}
+          currentUser={currentUser}
+          activeVoiceChannel={activeVoiceChannel}
+          isMuted={isMuted}
+          isDeafened={isDeafened}
+          onToggleMute={() => setIsMuted(!isMuted)}
+          onToggleDeafen={() => setIsDeafened(!isDeafened)}
+          onDisconnectVoice={() => setActiveVoiceChannel(null)}
+          onOpenCreateChannel={(type) => {
+            setCreateChannelType(type);
+            setIsCreateChannelOpen(true);
+          }}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenLogin={() => setIsLoginOpen(true)}
+          voicePresence={voicePresence}
+        />
+      </div>
+      {showChannelsMobile && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setShowChannelsMobile(false)}
+          />
+          <div className="absolute inset-y-0 left-0 flex animate-drawer-left">
+            <ChannelSidebar
+              server={activeServer}
+              activeChannelId={activeChannelId}
+              activeView={activeView}
+              onSelectChannel={handleSelectChannel}
+              onSelectView={(v) => {
+                setActiveView(v);
+                setShowChannelsMobile(false);
+              }}
+              currentUser={currentUser}
+              activeVoiceChannel={activeVoiceChannel}
+              isMuted={isMuted}
+              isDeafened={isDeafened}
+              onToggleMute={() => setIsMuted(!isMuted)}
+              onToggleDeafen={() => setIsDeafened(!isDeafened)}
+              onDisconnectVoice={() => setActiveVoiceChannel(null)}
+              onOpenCreateChannel={(type) => {
+                setCreateChannelType(type);
+                setIsCreateChannelOpen(true);
+              }}
+              onOpenSettings={() => setIsSettingsOpen(true)}
+              onOpenLogin={() => setIsLoginOpen(true)}
+              voicePresence={voicePresence}
+            />
+          </div>
+        </div>
+      )}
 
       {/* 3. Main Center Content Area */}
       {activeServerId === null ? (
@@ -699,6 +776,7 @@ Recomendo dividir o fluxo em:
         <DirectMessagesView
           friends={allMembers}
           currentUser={currentUser}
+          onOpenChannelList={() => setShowChannelsMobile(true)}
           onStartChat={(_user) => {
             setActiveServerId('srv_dezcord');
             setActiveChannelId('c_geral');
@@ -720,6 +798,7 @@ Recomendo dividir o fluxo em:
           onShareToChat={handleShareFileToChat}
           showMemberList={showMemberList}
           onToggleMemberList={() => setShowMemberList(!showMemberList)}
+          onOpenChannelList={() => setShowChannelsMobile(true)}
         />
       ) : activeServer && activeView === 'tasks' ? (
         // Project Task Board (Kanban organization)
@@ -733,6 +812,7 @@ Recomendo dividir o fluxo em:
           onDeleteTask={handleDeleteTask}
           showMemberList={showMemberList}
           onToggleMemberList={() => setShowMemberList(!showMemberList)}
+          onOpenChannelList={() => setShowChannelsMobile(true)}
         />
       ) : activeChannel?.type === 'voice' ? (
         // Active Voice Channel Room (WebRTC / Grid View)
@@ -741,6 +821,21 @@ Recomendo dividir o fluxo em:
           currentUser={currentUser}
           isMuted={isMuted}
           onToggleMute={() => setIsMuted(!isMuted)}
+          onOpenChannelList={() => setShowChannelsMobile(true)}
+          participants={voicePresence[activeChannel.id] || []}
+          isSupabaseConnected={isSupabaseConnected && authed}
+          callMicStream={voiceCall.micStream}
+          callMicError={voiceCall.micError}
+          callRemotes={voiceCall.remotes}
+          callSpeakingIds={voiceCall.speakingIds}
+          callCam={voiceCall.localCam}
+          callScreen={voiceCall.localScreen}
+          cameraOn={voiceCall.cameraOn}
+          screenOn={voiceCall.screenOn}
+          callMediaError={voiceCall.mediaError}
+          callRemoteVideos={voiceCall.remoteVideos}
+          onToggleCamera={() => voiceCall.toggleCamera()}
+          onToggleScreen={() => voiceCall.toggleScreenShare()}
           onDisconnect={() => {
             setActiveVoiceChannel(null);
             const firstText = activeServer?.channels.find((c) => c.type === 'text');
@@ -762,20 +857,43 @@ Recomendo dividir o fluxo em:
           onOpenSupabaseConfig={() => setIsSettingsOpen(true)}
           onOpenFilesView={() => setActiveView('files')}
           isBotTyping={isBotTyping}
+          onOpenChannelList={() => setShowChannelsMobile(true)}
         />
       ) : (
-        <div className="flex-1 flex items-center justify-center text-[#949ba4]">
+        <div className="flex-1 min-w-0 flex items-center justify-center text-[#949ba4]">
           Selecione um canal ou ferramenta de projeto para começar
         </div>
       )}
 
       {/* 4. Server Member List Sidebar (Far Right - Optional & Toggleable) */}
+      {/* Desktop: fixa | Mobile: gaveta da direita */}
       {activeServerId !== null && showMemberList && (
-        <MemberListSidebar
-          members={allMembers}
-          ownerId={activeServer?.owner_id || ''}
-        />
+        <div className="hidden md:block h-full shrink-0">
+          <MemberListSidebar
+            members={allMembers}
+            ownerId={activeServer?.owner_id || ''}
+          />
+        </div>
       )}
+      {activeServerId !== null && showMemberList && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setShowMemberList(false)}
+          />
+          <div className="absolute inset-y-0 right-0 flex animate-drawer-right">
+            <MemberListSidebar
+              members={allMembers}
+              ownerId={activeServer?.owner_id || ''}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Áudio global da call (continua fora da sala de voz) */}
+      {voiceCall.remotes.map((r) => (
+        <RemoteAudioEl key={r.user_id} stream={r.stream} />
+      ))}
 
       {/* MODALS */}
       <LoginModal

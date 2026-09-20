@@ -13,7 +13,8 @@ import {
   Reply,
   Database,
   Bot,
-  Sparkles
+  Sparkles,
+  Menu
 } from 'lucide-react';
 
 interface ChatAreaProps {
@@ -29,6 +30,7 @@ interface ChatAreaProps {
   onOpenSupabaseConfig: () => void;
   onOpenFilesView?: () => void;
   isBotTyping?: boolean;
+  onOpenChannelList?: () => void;
 }
 
 const isSameDay = (a: Date, b: Date) =>
@@ -82,6 +84,7 @@ export const ChatArea = ({
   onOpenSupabaseConfig,
   onOpenFilesView,
   isBotTyping = false,
+  onOpenChannelList,
 }: ChatAreaProps) => {
   const [inputText, setInputText] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
@@ -169,16 +172,25 @@ export const ChatArea = ({
   };
 
   return (
-    <div className="flex-1 bg-[#313338] flex flex-col h-full overflow-hidden">
+    <div className="flex-1 min-w-0 bg-[#313338] flex flex-col h-full overflow-hidden">
       {/* Channel Header */}
-      <div className="h-14 px-4 border-b border-[#1f2023] flex items-center justify-between text-white shadow-sm bg-[#313338] z-10">
-        <div className="flex items-center gap-3 overflow-hidden">
+      <div className="h-14 px-3 md:px-4 border-b border-[#1f2023] flex items-center justify-between gap-2 text-white shadow-sm bg-[#313338] z-10">
+        <div className="flex items-center gap-2 md:gap-3 overflow-hidden min-w-0">
+          {onOpenChannelList && (
+            <button
+              onClick={onOpenChannelList}
+              title="Lista de canais"
+              className="md:hidden text-[#b5bac1] hover:text-white transition shrink-0"
+            >
+              <Menu size={22} />
+            </button>
+          )}
           <Hash size={24} className="text-[#80848e] shrink-0" />
           <span className="font-bold text-base text-white truncate">{channel.name}</span>
           {channel.topic && (
             <>
-              <div className="w-[1px] h-4 bg-[#4e5058] shrink-0" />
-              <span className="text-xs text-[#949ba4] truncate font-normal">
+              <div className="w-[1px] h-4 bg-[#4e5058] shrink-0 hidden sm:block" />
+              <span className="text-xs text-[#949ba4] truncate font-normal hidden sm:block">
                 {channel.topic}
               </span>
             </>
@@ -186,7 +198,7 @@ export const ChatArea = ({
         </div>
 
         {/* Right Header Actions */}
-        <div className="flex items-center gap-3 text-[#b5bac1]">
+        <div className="flex items-center gap-2 md:gap-3 text-[#b5bac1] shrink-0">
           {/* Quick Files Access Button */}
           {onOpenFilesView && (
             <button
@@ -194,7 +206,7 @@ export const ChatArea = ({
               className="text-xs font-medium bg-[#1e1f22] hover:bg-[#2b2d31] text-[#949ba4] hover:text-white px-2.5 py-1 rounded transition"
               title="Acessar Arquivos do Projeto"
             >
-              📁 Arquivos
+              📁 <span className="hidden sm:inline">Arquivos</span>
             </button>
           )}
 
@@ -212,10 +224,10 @@ export const ChatArea = ({
             <span>{isSupabaseConnected ? 'Supabase Conectado' : 'Supabase (Demo)'}</span>
           </button>
 
-          <button title="Notificações" className="hover:text-white transition">
+          <button title="Notificações" className="hover:text-white transition hidden sm:block">
             <Bell size={18} />
           </button>
-          <button title="Mensagens Fixadas" className="hover:text-white transition">
+          <button title="Mensagens Fixadas" className="hover:text-white transition hidden sm:block">
             <Pin size={18} />
           </button>
           <button
@@ -229,7 +241,7 @@ export const ChatArea = ({
           </button>
 
           {/* Search Bar */}
-          <div className="relative flex items-center">
+          <div className="relative hidden md:flex items-center">
             <input
               type="text"
               placeholder="Buscar no canal..."

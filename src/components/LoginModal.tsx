@@ -111,7 +111,7 @@ export const LoginModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#111214]/80 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#111214]/80 backdrop-blur-xs p-4">
       <div className="w-full max-w-md bg-[#313338] rounded-xl shadow-2xl border border-[#232428] overflow-hidden animate-scale-up">
         <div className="h-20 bg-gradient-to-r from-[#5865f2] to-[#4752c4] relative flex items-end justify-center">
           <div className="absolute -bottom-8">

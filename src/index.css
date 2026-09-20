@@ -71,3 +71,22 @@ html, body, #root {
   box-shadow: 0 0 0 3px #23a55a;
   animation: speakingPulse 1.8s infinite;
 }
+
+/* Mobile drawer animations */
+@keyframes drawerInLeft {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes drawerInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.animate-drawer-left {
+  animation: drawerInLeft 0.2s ease-out;
+}
+
+.animate-drawer-right {
+  animation: drawerInRight 0.2s ease-out;
+}

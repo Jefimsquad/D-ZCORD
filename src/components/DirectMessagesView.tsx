@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import type { UserProfile } from '../types';
-import { UserPlus, MessageSquare, Phone, Video, Search, Check } from 'lucide-react';
+import { UserPlus, MessageSquare, Phone, Video, Search, Check, Menu } from 'lucide-react';
 
 interface DirectMessagesViewProps {
   friends: UserProfile[];
   currentUser: UserProfile;
   onStartChat: (user: UserProfile) => void;
+  onOpenChannelList?: () => void;
 }
 
 type FriendTab = 'online' | 'all' | 'pending' | 'add';
@@ -14,6 +15,7 @@ export const DirectMessagesView: React.FC<DirectMessagesViewProps> = ({
   friends,
   currentUser,
   onStartChat,
+  onOpenChannelList,
 }) => {
   const [tab, setTab] = useState<FriendTab>('online');
   const [searchQuery, setSearchQuery] = useState('');
@@ -40,10 +42,19 @@ export const DirectMessagesView: React.FC<DirectMessagesViewProps> = ({
   };
 
   return (
-    <div className="flex-1 bg-[#313338] flex flex-col h-full overflow-hidden">
+    <div className="flex-1 min-w-0 bg-[#313338] flex flex-col h-full overflow-hidden">
       {/* Top Header */}
-      <div className="h-12 px-6 border-b border-[#1f2023] flex items-center justify-between shadow-sm bg-[#313338]">
-        <div className="flex items-center gap-6">
+      <div className="h-12 px-3 md:px-6 border-b border-[#1f2023] flex items-center justify-between gap-2 shadow-sm bg-[#313338]">
+        <div className="flex items-center gap-3 md:gap-6 min-w-0">
+          {onOpenChannelList && (
+            <button
+              onClick={onOpenChannelList}
+              title="Lista de conversas"
+              className="md:hidden text-[#b5bac1] hover:text-white transition shrink-0"
+            >
+              <Menu size={22} />
+            </button>
+          )}
           <div className="flex items-center gap-2 font-semibold text-white">
             <UserPlus size={20} className="text-[#80848e]" />
             <span>Amigos</span>

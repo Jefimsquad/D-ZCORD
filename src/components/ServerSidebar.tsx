@@ -19,7 +19,7 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
   isSupabaseConnected,
 }) => {
   return (
-    <div className="w-[72px] bg-[#1e1f22] flex flex-col items-center py-3 gap-2 select-none h-full z-20 border-r border-[#191b1d]">
+    <div className="w-[72px] shrink-0 bg-[#1e1f22] flex flex-col items-center py-3 gap-2 select-none h-full z-20 border-r border-[#191b1d]">
       {/* Discord / DÉZCORD Home button (DMs) */}
       <div className="relative group flex items-center justify-center w-full">
         {/* Active Pill Indicator */}

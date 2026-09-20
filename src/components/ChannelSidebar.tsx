@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Server, Channel, UserProfile } from '../types';
+import type { VoicePeerInfo } from '../lib/voice';
 import {
   Hash,
   Volume2,
@@ -15,7 +16,9 @@ import {
   Shield,
   HardDrive,
   CheckSquare,
-  Edit3
+  Edit3,
+  Video,
+  ScreenShare
 } from 'lucide-react';
 
 interface ChannelSidebarProps {
@@ -34,6 +37,7 @@ interface ChannelSidebarProps {
   onOpenCreateChannel: (type: 'text' | 'voice') => void;
   onOpenSettings: () => void;
   onOpenLogin: () => void;
+  voicePresence?: Record<string, VoicePeerInfo[]>;
 }
 
 export const ChannelSidebar = ({
@@ -52,6 +56,7 @@ export const ChannelSidebar = ({
   onOpenCreateChannel,
   onOpenSettings,
   onOpenLogin,
+  voicePresence,
 }: ChannelSidebarProps) => {
   const [isServerMenuOpen, setIsServerMenuOpen] = useState(false);
 
@@ -227,6 +232,9 @@ export const ChannelSidebar = ({
           <div className="space-y-0.5">
             {voiceChannels.map((channel) => {
               const isVoiceConnected = activeVoiceChannel?.id === channel.id;
+              const peers = (voicePresence?.[channel.id] || []).filter(
+                (p) => p.user_id !== currentUser.id
+              );
               return (
                 <div key={channel.id}>
                   <button
@@ -241,8 +249,14 @@ export const ChannelSidebar = ({
                       <Volume2 size={18} className={isVoiceConnected ? 'text-[#23a55a]' : 'text-[#80848e]'} />
                       <span className="truncate">{channel.name}</span>
                     </div>
-                    {isVoiceConnected && (
+                    {isVoiceConnected ? (
                       <span className="w-2 h-2 rounded-full bg-[#23a55a] animate-ping" />
+                    ) : (
+                      peers.length > 0 && (
+                        <span className="text-[10px] font-bold text-[#23a55a] bg-[#23a55a]/15 px-1.5 py-0.5 rounded-full">
+                          {peers.length}
+                        </span>
+                      )
                     )}
                   </button>
 
@@ -258,6 +272,21 @@ export const ChannelSidebar = ({
                       {isMuted && <MicOff size={12} className="text-[#f23f43]" />}
                     </div>
                   )}
+
+                  {/* Outros usuários na call (tempo real) */}
+                  {peers.map((peer) => (
+                    <div key={peer.user_id} className="pl-6 pr-2 py-1 flex items-center gap-2 text-xs text-[#dbdee1]">
+                      <img
+                        src={peer.avatar_url || 'https://via.placeholder.com/20'}
+                        alt={peer.display_name}
+                        className="w-5 h-5 rounded-full object-cover"
+                      />
+                      <span className="truncate flex-1">{peer.display_name}</span>
+                      {peer.video && <Video size={12} className="text-[#23a55a]" />}
+                      {peer.screensharing && <ScreenShare size={12} className="text-[#23a55a]" />}
+                      {peer.muted && <MicOff size={12} className="text-[#f23f43]" />}
+                    </div>
+                  ))}
                 </div>
               );
             })}

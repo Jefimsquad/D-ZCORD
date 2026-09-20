@@ -237,18 +237,18 @@ git push -u origin main`;
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex bg-[#111214]/80 backdrop-blur-sm animate-fade-in">
-      <div className="flex w-full h-full max-w-5xl mx-auto my-auto max-h-[850px] bg-[#313338] rounded-xl overflow-hidden shadow-2xl border border-[#232428]">
+    <div className="fixed inset-0 z-50 flex bg-[#111214]/80 backdrop-blur-sm animate-fade-in p-2 sm:p-4">
+      <div className="flex flex-col md:flex-row w-full h-full max-w-5xl mx-auto my-auto max-h-[850px] bg-[#313338] rounded-xl overflow-hidden shadow-2xl border border-[#232428]">
         {/* Left Settings Navigation */}
-        <div className="w-60 bg-[#2b2d31] p-6 flex flex-col justify-between border-r border-[#1f2023] select-none">
-          <div className="space-y-4">
-            <div>
-              <div className="text-[11px] font-bold text-[#949ba4] tracking-wider uppercase px-2 mb-2">
+        <div className="w-full md:w-60 shrink-0 bg-[#2b2d31] p-2 md:p-6 flex flex-row md:flex-col gap-1 md:gap-0 md:justify-between border-b md:border-b-0 md:border-r border-[#1f2023] select-none overflow-x-auto">
+          <div className="flex flex-row md:flex-col gap-1 md:space-y-4 items-center md:items-stretch">
+            <div className="shrink-0">
+              <div className="hidden md:block text-[11px] font-bold text-[#949ba4] tracking-wider uppercase px-2 mb-2">
                 CONFIGURAÇÕES DE USUÁRIO
               </div>
               <button
                 onClick={() => setActiveTab('account')}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition ${
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition whitespace-nowrap ${
                   activeTab === 'account'
                     ? 'bg-[#404249] text-white'
                     : 'text-[#949ba4] hover:bg-[#35373c] hover:text-[#dbdee1]'
@@ -259,13 +259,13 @@ git push -u origin main`;
               </button>
             </div>
 
-            <div>
-              <div className="text-[11px] font-bold text-[#949ba4] tracking-wider uppercase px-2 mb-2">
+            <div className="shrink-0">
+              <div className="hidden md:block text-[11px] font-bold text-[#949ba4] tracking-wider uppercase px-2 mb-2">
                 INTEGRAÇÕES PRINCIPAIS
               </div>
               <button
                 onClick={() => setActiveTab('supabase')}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition ${
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition whitespace-nowrap ${
                   activeTab === 'supabase'
                     ? 'bg-[#1c3829] text-[#3ecf8e]'
                     : 'text-[#949ba4] hover:bg-[#35373c] hover:text-[#dbdee1]'
@@ -277,7 +277,7 @@ git push -u origin main`;
 
               <button
                 onClick={() => setActiveTab('github')}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition mt-1 ${
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition whitespace-nowrap mt-1 ${
                   activeTab === 'github'
                     ? 'bg-[#404249] text-white'
                     : 'text-[#949ba4] hover:bg-[#35373c] hover:text-[#dbdee1]'
@@ -290,13 +290,13 @@ git push -u origin main`;
               </button>
             </div>
 
-            <div>
-              <div className="text-[11px] font-bold text-[#949ba4] tracking-wider uppercase px-2 mb-2">
+            <div className="shrink-0">
+              <div className="hidden md:block text-[11px] font-bold text-[#949ba4] tracking-wider uppercase px-2 mb-2">
                 APLICATIVO & ÁUDIO
               </div>
               <button
                 onClick={() => setActiveTab('voice')}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition ${
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition whitespace-nowrap ${
                   activeTab === 'voice'
                     ? 'bg-[#404249] text-white'
                     : 'text-[#949ba4] hover:bg-[#35373c] hover:text-[#dbdee1]'
@@ -308,13 +308,13 @@ git push -u origin main`;
             </div>
           </div>
 
-          <div className="text-xs text-[#949ba4] px-2">
+          <div className="hidden md:block text-xs text-[#949ba4] px-2">
             DÉZCORD v1.0.0 Alpha
           </div>
         </div>
 
         {/* Right Settings Content */}
-        <div className="flex-1 p-8 overflow-y-auto relative flex flex-col justify-between">
+        <div className="flex-1 min-h-0 p-4 md:p-8 overflow-y-auto relative flex flex-col justify-between">
           {/* Close Button (Discord Style ESC) */}
           <button
             onClick={onClose}

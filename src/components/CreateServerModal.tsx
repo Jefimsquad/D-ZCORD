@@ -32,7 +32,7 @@ export const CreateServerModal: React.FC<CreateServerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#111214]/75 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#111214]/75 backdrop-blur-xs p-4">
       <div className="w-full max-w-md bg-[#313338] rounded-md shadow-2xl border border-[#232428] overflow-hidden animate-scale-up">
         {/* Modal Header */}
         <div className="px-6 pt-6 pb-2 text-center relative">
