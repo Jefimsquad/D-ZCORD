@@ -105,6 +105,75 @@ export function App() {
   const [authChecked, setAuthChecked] = useState(false);
   const [authed, setAuthed] = useState(false);
 
+  // Membros: mock + Supabase profiles + usuário atual (sincronizado)
+  const [allMembers, setAllMembers] = useState<UserProfile[]>(sampleUsers);
+
+  // Sincroniza perfis do Supabase com a barra lateral de membros
+  useEffect(() => {
+    const supabase = getSupabase();
+    if (!supabase || !isSupabaseConnected) return;
+
+    const mapRow = (row: any): UserProfile => ({
+      id: String(row.id),
+      username: row.username || String(row.id).split('@')[0] || 'usuario',
+      display_name: row.display_name || row.username || 'Usuário',
+      avatar_url: row.avatar_url || '',
+      status: (row.status as UserProfile['status']) || 'online',
+      custom_status: row.custom_status || '',
+      bio: row.bio || '',
+      banner_color: row.banner_color || '#5865F2',
+      email: row.email || '',
+    });
+
+    const mergeMembers = (remote: UserProfile[]) => {
+      setAllMembers((prev) => {
+        const byId = new Map<string, UserProfile>();
+        [...sampleUsers, ...prev, ...remote].forEach((m) => {
+          if (m?.id) byId.set(String(m.id), m);
+        });
+        return Array.from(byId.values());
+      });
+    };
+
+    supabase
+      .from('profiles')
+      .select('*')
+      .then(({ data, error }) => {
+        if (!error && data) mergeMembers((data as any[]).map(mapRow));
+      });
+
+    const channel = supabase
+      .channel('profiles-member-list')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload: any) => {
+        const row = payload.new || payload.old;
+        if (!row?.id) return;
+        if (payload.eventType === 'DELETE') {
+          setAllMembers((prev) => prev.filter((m) => m.id !== String(row.id)));
+          return;
+        }
+        mergeMembers([mapRow(row)]);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSupabaseConnected]);
+
+  // Mantém usuário atual refletido na lista mesmo sem Supabase
+  useEffect(() => {
+    setAllMembers((prev) => {
+      if (!currentUser?.id) return prev;
+      const idx = prev.findIndex((m) => m.id === currentUser.id);
+      if (idx === -1) return [...prev, currentUser];
+      if (JSON.stringify(prev[idx]) === JSON.stringify(currentUser)) return prev;
+      const next = [...prev];
+      next[idx] = currentUser;
+      return next;
+    });
+  }, [currentUser]);
+
   // Persist local state
   useEffect(() => {
     localStorage.setItem('dezcord_servers', JSON.stringify(servers));
@@ -582,7 +651,7 @@ Recomendo dividir o fluxo em:
       {activeServerId === null ? (
         // Direct Messages / Friends Hub View
         <DirectMessagesView
-          friends={sampleUsers}
+          friends={allMembers}
           currentUser={currentUser}
           onStartChat={(_user) => {
             setActiveServerId('srv_dezcord');
@@ -657,7 +726,7 @@ Recomendo dividir o fluxo em:
       {/* 4. Server Member List Sidebar (Far Right - Optional & Toggleable) */}
       {activeServerId !== null && showMemberList && (
         <MemberListSidebar
-          members={sampleUsers}
+          members={allMembers}
           ownerId={activeServer?.owner_id || ''}
         />
       )}

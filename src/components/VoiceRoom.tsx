@@ -7,7 +7,9 @@ import {
   VideoOff,
   ScreenShare,
   PhoneOff,
-  Volume2
+  Volume2,
+  Maximize,
+  Minimize
 } from 'lucide-react';
 
 interface VoiceRoomProps {
@@ -29,8 +31,10 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isScreenFullscreen, setIsScreenFullscreen] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const screenRef = useRef<HTMLVideoElement | null>(null);
+  const screenContainerRef = useRef<HTMLDivElement | null>(null);
   const videoStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
 
@@ -109,6 +113,29 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
       screenStreamRef.current = null;
     };
   }, []);
+
+  // Track fullscreen changes (ESC sai sozinho, precisa sincronizar o ícone)
+  useEffect(() => {
+    const onFsChange = () => {
+      setIsScreenFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
+  // Tela cheia no container do compartilhamento
+  const toggleScreenFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await screenContainerRef.current?.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch (err) {
+      console.warn('Fullscreen falhou:', err);
+      setError('Não foi possível entrar em tela cheia neste navegador.');
+    }
+  };
 
   // Handle Video Camera toggle
   const toggleCamera = async () => {
@@ -251,7 +278,10 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
           {/* Screen Share Tile if active */}
           {isScreenSharing && (
-            <div className="relative bg-[#1e1f22] rounded-xl aspect-video flex flex-col items-center justify-center p-2 border border-[#5865f2] shadow-lg overflow-hidden col-span-2">
+            <div
+              ref={screenContainerRef}
+              className="relative bg-black rounded-xl aspect-video flex flex-col items-center justify-center p-2 border border-[#5865f2] shadow-lg overflow-hidden col-span-2"
+            >
               <video
                 ref={screenRef}
                 autoPlay
@@ -261,6 +291,13 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
               <div className="absolute bottom-3 left-3 bg-[#111214]/80 backdrop-blur px-3 py-1 rounded text-xs text-white">
                 Transmissão de Tela de {currentUser.display_name}
               </div>
+              <button
+                onClick={toggleScreenFullscreen}
+                className="absolute top-3 right-3 p-2 rounded-lg bg-[#111214]/80 hover:bg-[#5865f2] text-white transition"
+                title={isScreenFullscreen ? 'Sair da tela cheia' : 'Ver em tela cheia'}
+              >
+                {isScreenFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+              </button>
             </div>
           )}
 
