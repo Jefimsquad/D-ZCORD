@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { UserProfile } from '../types';
 import { User, Sparkles, Check, Mail, LogOut } from 'lucide-react';
-import { getSupabase, signInWithEmail, verifyEmailCode, signOut, ensureProfile } from '../lib/supabase';
+import { getSupabase, signInWithEmail, verifyEmailCode, signOut, ensureProfile, syncProfileToSupabase } from '../lib/supabase';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -89,16 +89,23 @@ export const LoginModal = ({
     setFeedback('Deslogado.');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (displayName.trim()) {
-      onSaveUser({
+      const updated = {
         ...currentUser,
         display_name: displayName.trim(),
         username: username.trim().toLowerCase().replace(/\s+/g, '_') || 'usuario',
         avatar_url: avatarUrl.trim() || PRESET_AVATARS[0],
         custom_status: customStatus.trim(),
-      });
+      };
+      onSaveUser(updated);
+      // Persiste no Supabase se já houver sessão (senão o App sincroniza no login)
+      try {
+        await syncProfileToSupabase(updated);
+      } catch {
+        // salvo localmente mesmo assim
+      }
       onClose();
     }
   };

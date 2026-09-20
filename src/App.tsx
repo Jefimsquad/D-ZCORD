@@ -9,7 +9,7 @@ import {
   initialFiles,
   initialTasks,
 } from './mockData';
-import { getSupabase, testSupabaseConnection, getStoredSupabaseConfig, syncProfileToSupabase } from './lib/supabase';
+import { getSupabase, testSupabaseConnection, getStoredSupabaseConfig, syncProfileToSupabase, fetchChannelMessages } from './lib/supabase';
 import { ServerSidebar } from './components/ServerSidebar';
 import { ChannelSidebar } from './components/ChannelSidebar';
 import { ChatArea } from './components/ChatArea';
@@ -262,6 +262,14 @@ export function App() {
     const supabase = getSupabase();
     if (!supabase || !isSupabaseConnected) return;
 
+    const resolveAuthor = (userId: string): UserProfile => {
+      return (
+        allMembers.find((u) => u.id === userId) ||
+        sampleUsers.find((u) => u.id === userId) ||
+        currentUser
+      );
+    };
+
     const channel = supabase
       .channel('schema-db-changes')
       .on(
@@ -276,7 +284,7 @@ export function App() {
             id: payload.new.id,
             channel_id: payload.new.channel_id,
             user_id: payload.new.user_id,
-            author: sampleUsers.find((u) => u.id === payload.new.user_id) || currentUser,
+            author: resolveAuthor(payload.new.user_id),
             content: payload.new.content,
             attachments: payload.new.attachments || [],
             created_at: payload.new.created_at,
@@ -297,7 +305,45 @@ export function App() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [isSupabaseConnected, currentUser]);
+  }, [isSupabaseConnected, currentUser, allMembers]);
+
+  // Carrega histórico persistido do canal ativo (Supabase > mescla com local)
+  useEffect(() => {
+    const supabase = getSupabase();
+    if (!supabase || !isSupabaseConnected || !activeChannelId) return;
+    let cancelled = false;
+    fetchChannelMessages(activeChannelId).then((rows) => {
+      if (cancelled || !rows.length) return;
+      setMessagesMap((prev) => {
+        const local = prev[activeChannelId] || [];
+        const byId = new Map(local.map((m) => [m.id, m]));
+        rows.forEach((r: any) => {
+          if (byId.has(r.id)) return;
+          const author =
+            allMembers.find((u) => u.id === r.user_id) ||
+            sampleUsers.find((u) => u.id === r.user_id) ||
+            currentUser;
+          byId.set(r.id, {
+            id: r.id,
+            channel_id: r.channel_id,
+            user_id: r.user_id,
+            author,
+            content: r.content,
+            attachments: r.attachments || [],
+            created_at: r.created_at,
+          } as Message);
+        });
+        const merged = Array.from(byId.values()).sort(
+          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+        return { ...prev, [activeChannelId]: merged };
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSupabaseConnected, activeChannelId]);
 
   // Find active server and channel
   const activeServer = servers.find((s) => s.id === activeServerId) || null;

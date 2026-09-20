@@ -4,7 +4,8 @@ import {
   getStoredSupabaseConfig,
   saveSupabaseConfig,
   testSupabaseConnection,
-  getSupabase
+  getSupabase,
+  syncProfileToSupabase
 } from '../lib/supabase';
 import {
   X,
@@ -42,6 +43,8 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
   const [avatarUrl, setAvatarUrl] = useState(currentUser.avatar_url);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarFeedback, setAvatarFeedback] = useState('');
+  const [accountFeedback, setAccountFeedback] = useState('');
+  const [accountSaving, setAccountSaving] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
   // Supabase state
@@ -129,13 +132,24 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSaveAccount = () => {
-    onUpdateUser({
+  const handleSaveAccount = async () => {
+    const updated = {
       display_name: displayName,
       custom_status: customStatus,
       bio,
       avatar_url: avatarUrl,
-    });
+    };
+    onUpdateUser(updated);
+    setAccountSaving(true);
+    setAccountFeedback('');
+    try {
+      const ok = await syncProfileToSupabase({ ...currentUser, ...updated });
+      setAccountFeedback(ok ? 'Perfil salvo permanentemente!' : 'Salvo localmente. Verifique login e conexão Supabase.');
+    } catch {
+      setAccountFeedback('Salvo localmente. Falha ao sincronizar.');
+    } finally {
+      setAccountSaving(false);
+    }
   };
 
   const persistAvatar = async (url: string) => {
@@ -145,7 +159,11 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
     const { data } = await supabase.auth.getUser();
     const authId = data.user?.id;
     if (!authId) return;
-    await supabase.from('profiles').upsert({ id: authId, avatar_url: url }, { onConflict: 'id' });
+    // UPDATE primeiro (preserva username/display_name NOT NULL); upsert completo se não existir
+    const { error } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', authId);
+    if (error) {
+      await syncProfileToSupabase({ ...currentUser, avatar_url: url, id: authId });
+    }
   };
 
   const handleAvatarFile = (fileList: FileList | null) => {
@@ -404,10 +422,14 @@ git push -u origin main`;
 
                   <button
                     onClick={handleSaveAccount}
-                    className="bg-[#5865f2] hover:bg-[#4752c4] text-white px-5 py-2 rounded text-sm font-semibold transition"
+                    disabled={accountSaving}
+                    className="bg-[#5865f2] hover:bg-[#4752c4] disabled:opacity-50 text-white px-5 py-2 rounded text-sm font-semibold transition"
                   >
-                    Salvar Alterações
+                    {accountSaving ? 'Salvando...' : 'Salvar Alterações'}
                   </button>
+                  {accountFeedback && (
+                    <p className="text-xs text-[#949ba4]">{accountFeedback}</p>
+                  )}
                 </div>
               </div>
             </div>

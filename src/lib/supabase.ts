@@ -141,16 +141,22 @@ export async function ensureProfile(authId: string, email: string, displayName?:
     }
     return existing;
   }
-  const payload = {
-    id: authId,
-    username: base,
-    display_name: displayName || base,
-    avatar_url: '',
-    status: 'online',
-    email,
-  };
-  const { data } = await supabase.from('profiles').upsert(payload, { onConflict: 'id' }).select().maybeSingle();
-  return data || payload;
+  // Tenta inserir; se username colidir, adiciona sufixo
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const uname = attempt === 0 ? base : `${base}_${Math.random().toString(36).slice(2, 6)}`;
+    const payload = {
+      id: authId,
+      username: uname,
+      display_name: displayName || uname,
+      avatar_url: '',
+      status: 'online',
+      email,
+    };
+    const { data, error } = await supabase.from('profiles').upsert(payload, { onConflict: 'id' }).select().maybeSingle();
+    if (!error) return data || payload;
+    if (!error.message.includes('duplicate') && (error as any).code !== '23505') return null;
+  }
+  return null;
 }
 
 export async function syncProfileToSupabase(profile: {
@@ -184,8 +190,47 @@ export async function syncProfileToSupabase(profile: {
     { onConflict: 'id' }
   );
   if (error) {
+    // Username único: tenta com sufixo em vez de perder a alteração
+    if (error.message.includes('duplicate') || (error as any).code === '23505') {
+      const retry = await supabase.from('profiles').upsert(
+        {
+          id: profile.id,
+          username: `${profile.username}_${Math.random().toString(36).slice(2, 6)}`,
+          display_name: profile.display_name,
+          avatar_url: profile.avatar_url || '',
+          status: profile.status || 'online',
+          custom_status: profile.custom_status || '',
+          bio: profile.bio || '',
+          banner_color: profile.banner_color || '#5865F2',
+          email: profile.email || data.user.email || '',
+        },
+        { onConflict: 'id' }
+      );
+      if (retry.error) {
+        console.warn('Falha ao sincronizar perfil:', retry.error.message);
+        return false;
+      }
+      return true;
+    }
     console.warn('Falha ao sincronizar perfil:', error.message);
     return false;
   }
   return true;
+}
+
+// Busca mensagens persistidas de um canal (para não depender só do localStorage)
+export async function fetchChannelMessages(channelId: string) {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('channel_id', channelId)
+    .order('created_at', { ascending: true })
+    .limit(200);
+  if (error) {
+    console.warn('Falha ao carregar mensagens:', error.message);
+    return [];
+  }
+  return (data as any[]) || [];
 }
