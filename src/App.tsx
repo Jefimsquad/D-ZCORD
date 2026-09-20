@@ -9,7 +9,7 @@ import {
   initialFiles,
   initialTasks,
 } from './mockData';
-import { getSupabase, testSupabaseConnection, getStoredSupabaseConfig } from './lib/supabase';
+import { getSupabase, testSupabaseConnection, getStoredSupabaseConfig, syncProfileToSupabase } from './lib/supabase';
 import { ServerSidebar } from './components/ServerSidebar';
 import { ChannelSidebar } from './components/ChannelSidebar';
 import { ChatArea } from './components/ChatArea';
@@ -22,6 +22,7 @@ import { CreateServerModal } from './components/CreateServerModal';
 import { FileStorageView } from './components/FileStorageView';
 import { ProjectTaskBoard } from './components/ProjectTaskBoard';
 import { LoginModal } from './components/LoginModal';
+import { AuthScreen } from './components/AuthScreen';
 
 export function App() {
   // Current user (editable locally)
@@ -101,6 +102,8 @@ export function App() {
 
   // Supabase state
   const [isSupabaseConnected, setIsSupabaseConnected] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [authed, setAuthed] = useState(false);
 
   // Persist local state
   useEffect(() => {
@@ -125,9 +128,15 @@ export function App() {
 
   useEffect(() => {
     localStorage.setItem('dezcord_current_user', JSON.stringify(currentUser));
-  }, [currentUser]);
+    if (authed) {
+      const t = setTimeout(() => {
+        syncProfileToSupabase(currentUser);
+      }, 800);
+      return () => clearTimeout(t);
+    }
+  }, [currentUser, authed]);
 
-  // Check Supabase connection on startup
+  // Check Supabase connection on startup + restore real auth session
   useEffect(() => {
     const { url, anonKey } = getStoredSupabaseConfig();
     if (url && anonKey) {
@@ -135,6 +144,42 @@ export function App() {
         setIsSupabaseConnected(res.success);
       });
     }
+    const supabase = getSupabase();
+    if (!supabase) return;
+    supabase.auth.getSession().then(async ({ data }) => {
+      const user = data.session?.user;
+      setAuthed(!!user?.id);
+      setAuthChecked(true);
+      if (!user?.id || !user.email) return;
+      const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+      setCurrentUser((prev) => ({
+        ...prev,
+        id: user.id,
+        email: user.email!,
+        username: (profile as any)?.username || prev.username,
+        display_name: (profile as any)?.display_name || prev.display_name,
+        avatar_url: (profile as any)?.avatar_url || prev.avatar_url,
+      }));
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT' || !session?.user) {
+        setAuthed(false);
+        return;
+      }
+      setAuthed(true);
+      const user = session?.user;
+      if (!user?.id || !user.email) return;
+      const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+      setCurrentUser((prev) => ({
+        ...prev,
+        id: user.id,
+        email: user.email!,
+        username: (profile as any)?.username || prev.username,
+        display_name: (profile as any)?.display_name || prev.display_name,
+        avatar_url: (profile as any)?.avatar_url || prev.avatar_url,
+      }));
+    });
+    return () => listener.subscription.unsubscribe();
   }, []);
 
   // Supabase Realtime Listener for messages
@@ -471,6 +516,18 @@ Recomendo dividir o fluxo em:
 
   // Active channel messages
   const currentMessages = activeChannel ? messagesMap[activeChannel.id] || [] : [];
+
+  if (!authChecked) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-[#1e1f22] text-[#949ba4] text-sm">
+        Carregando DÉZCORD...
+      </div>
+    );
+  }
+
+  if (!authed) {
+    return <AuthScreen onAuth={() => setAuthed(true)} />;
+  }
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#313338] text-[#dbdee1] font-sans antialiased">

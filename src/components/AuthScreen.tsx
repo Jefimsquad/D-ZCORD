@@ -1,0 +1,111 @@
+import { useState } from 'react';
+import { Mail, Lock, Eye, EyeOff, LogIn, UserPlus } from 'lucide-react';
+import { signInWithPassword, signUpWithPassword } from '../lib/supabase';
+
+interface AuthScreenProps {
+  onAuth: () => void;
+}
+
+export const AuthScreen = ({ onAuth }: AuthScreenProps) => {
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [feedback, setFeedback] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || password.length < 6) {
+      setFeedback('Use um e-mail válido e senha com 6+ caracteres.');
+      return;
+    }
+    setLoading(true);
+    setFeedback('');
+    const res = mode === 'login'
+      ? await signInWithPassword(email, password)
+      : await signUpWithPassword(email, password);
+    setLoading(false);
+    setFeedback(res.message);
+    if (res.success && !res.needsConfirm) {
+      onAuth();
+    }
+  };
+
+  return (
+    <div className="flex h-screen w-screen items-center justify-center bg-[#1e1f22] p-4">
+      <div className="w-full max-w-sm bg-[#313338] rounded-xl border border-[#232428] shadow-2xl overflow-hidden">
+        <div className="h-20 bg-gradient-to-r from-[#5865f2] to-[#4752c4] flex items-center justify-center">
+          <span className="text-white text-2xl font-bold tracking-wide">DÉZCORD</span>
+        </div>
+        <div className="p-6">
+          <h2 className="text-white text-lg font-bold text-center">
+            {mode === 'login' ? 'Entrar no DÉZCORD' : 'Criar sua conta'}
+          </h2>
+          <p className="text-xs text-[#949ba4] text-center mt-1 mb-4">
+            Login obrigatório por e-mail e senha. A sessão fica salva.
+          </p>
+
+          <div className="flex bg-[#1e1f22] rounded p-0.5 text-xs mb-4">
+            <button
+              onClick={() => setMode('login')}
+              className={`flex-1 py-1.5 rounded transition ${mode === 'login' ? 'bg-[#35373c] text-white font-semibold' : 'text-[#949ba4] hover:text-white'}`}
+            >
+              Entrar
+            </button>
+            <button
+              onClick={() => setMode('register')}
+              className={`flex-1 py-1.5 rounded transition ${mode === 'register' ? 'bg-[#35373c] text-white font-semibold' : 'text-[#949ba4] hover:text-white'}`}
+            >
+              Criar conta
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <div className="relative">
+              <Mail size={16} className="absolute left-3 top-2.5 text-[#949ba4]" />
+              <input
+                type="email"
+                required
+                placeholder="voce@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-[#1e1f22] text-white pl-9 pr-3 py-2 rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#5865f2]"
+              />
+            </div>
+            <div className="relative">
+              <Lock size={16} className="absolute left-3 top-2.5 text-[#949ba4]" />
+              <input
+                type={showPass ? 'text' : 'password'}
+                required
+                minLength={6}
+                placeholder="Senha (6+ caracteres)"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-[#1e1f22] text-white pl-9 pr-10 py-2 rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#5865f2]"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPass(!showPass)}
+                className="absolute right-2 top-2 text-[#949ba4] hover:text-white"
+                title={showPass ? 'Ocultar senha' : 'Mostrar senha'}
+              >
+                {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-[#5865f2] hover:bg-[#4752c4] disabled:opacity-50 text-white text-sm font-semibold py-2.5 rounded transition flex items-center justify-center gap-2"
+            >
+              {mode === 'login' ? <LogIn size={16} /> : <UserPlus size={16} />}
+              <span>{loading ? 'Aguarde...' : mode === 'login' ? 'Entrar' : 'Criar conta e entrar'}</span>
+            </button>
+          </form>
+
+          {feedback && <p className="text-xs text-[#dbdee1] mt-3 text-center">{feedback}</p>}
+        </div>
+      </div>
+    </div>
+  );
+};

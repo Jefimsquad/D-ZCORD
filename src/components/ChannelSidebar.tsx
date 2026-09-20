@@ -323,7 +323,7 @@ function renderUserBar(
       <div
         onClick={onOpenLogin}
         className="flex items-center gap-2 p-1 rounded hover:bg-[#35373c] cursor-pointer transition max-w-[130px] group"
-        title="Clique para editar nome e avatar"
+        title="Clique para entrar / editar perfil"
       >
         <div className="relative shrink-0">
           <img
@@ -373,9 +373,9 @@ function renderUserBar(
         <button
           onClick={onOpenSettings}
           title="Configurações do Usuário"
-          className="p-1.5 rounded hover:bg-[#35373c] hover:text-white transition"
+          className="p-1.5 rounded hover:bg-[#35373c] hover:text-white transition hover:rotate-15"
         >
-          <Settings size={18} />
+          <Settings size={20} />
         </button>
       </div>
     </div>

@@ -31,7 +31,13 @@ interface ChatAreaProps {
   isBotTyping?: boolean;
 }
 
-const COMMON_EMOJIS = ['👍', '❤️', '🔥', '🎉', '🚀', '💀', '😂', '👀', '✨', '⚡'];
+const EMOJI_GROUPS: { name: string; emojis: string[] }[] = [
+  { name: 'Rostos', emojis: ['😀', '😁', '😂', '🤣', '😊', '😍', '😎', '🤔', '😴', '😭', '😡', '🥳', '😱', '🤖', '👻', '💀'] },
+  { name: 'Gestos', emojis: ['👍', '👎', '👏', '🙏', '💪', '👀', '🫡', '✌️', '🤝', '👋', '🫶', '👌'] },
+  { name: 'Corações', emojis: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '💔', '✨', '💯', '💥'] },
+  { name: 'Festa', emojis: ['🎉', '🔥', '🚀', '⚡', '🎮', '🏆', '🎧', '🎬', '⚽', '🍕', '☕', '🍺'] },
+  { name: 'Símbolos', emojis: ['✅', '❌', '⭐', '❓', '❗', '💡', '📌', '🎯', '🚫', '🔔', '💤', '♻️'] },
+];
 
 export const ChatArea = ({
   channel,
@@ -49,6 +55,7 @@ export const ChatArea = ({
 }: ChatAreaProps) => {
   const [inputText, setInputText] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
+  const [showInputPicker, setShowInputPicker] = useState(false);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [previewAttachment, setPreviewAttachment] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -247,18 +254,28 @@ export const ChatArea = ({
 
                   {/* Quick Reaction Popup */}
                   {showEmojiPicker === message.id && (
-                    <div className="absolute right-0 top-8 bg-[#2b2d31] border border-[#1f2023] rounded-lg p-2 shadow-2xl flex gap-1 z-30">
-                      {COMMON_EMOJIS.map((emoji) => (
-                        <button
-                          key={emoji}
-                          onClick={() => {
-                            onAddReaction(message.id, emoji);
-                            setShowEmojiPicker(null);
-                          }}
-                          className="hover:scale-125 transition text-base p-1"
-                        >
-                          {emoji}
-                        </button>
+                    <div className="absolute right-0 top-8 bg-[#2b2d31] border border-[#1f2023] rounded-lg p-2 shadow-2xl z-30 w-72 max-h-64 overflow-y-auto">
+                      {EMOJI_GROUPS.map((group) => (
+                        <div key={group.name} className="mb-1.5">
+                          <div className="text-[10px] font-bold text-[#949ba4] uppercase px-1 mb-1">
+                            {group.name}
+                          </div>
+                          <div className="grid grid-cols-8 gap-0.5">
+                            {group.emojis.map((emoji) => (
+                              <button
+                                key={emoji}
+                                onClick={() => {
+                                  onAddReaction(message.id, emoji);
+                                  setShowEmojiPicker(null);
+                                }}
+                                className="hover:bg-[#35373c] hover:scale-125 transition text-lg p-1 rounded"
+                                title={emoji}
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -441,7 +458,7 @@ export const ChatArea = ({
       </div>
 
       {/* Message Input Box */}
-      <div className="px-4 pb-5 pt-2">
+      <div className="px-4 pb-5 pt-2 relative">
         <div className="bg-[#383a40] rounded-lg flex items-center px-4 py-2.5 gap-3">
           {/* File Upload Button */}
           <button
@@ -470,13 +487,42 @@ export const ChatArea = ({
           />
 
           {/* Emoji Button */}
-          <button
-            onClick={() => setInputText((prev) => prev + ' 🚀')}
-            title="Adicionar Emoji"
-            className="text-[#b5bac1] hover:text-[#f0b232] transition shrink-0"
-          >
-            <Smile size={22} />
-          </button>
+          <div className="relative shrink-0">
+            <button
+              onClick={() => setShowInputPicker((v) => !v)}
+              title="Adicionar Emoji"
+              className={`transition shrink-0 ${showInputPicker ? 'text-[#f0b232]' : 'text-[#b5bac1] hover:text-[#f0b232]'}`}
+            >
+              <Smile size={22} />
+            </button>
+            {showInputPicker && (
+              <div className="absolute bottom-9 right-0 bg-[#2b2d31] border border-[#1f2023] rounded-lg p-2 shadow-2xl z-30 w-72 max-h-64 overflow-y-auto">
+                {EMOJI_GROUPS.map((group) => (
+                  <div key={group.name} className="mb-1.5">
+                    <div className="text-[10px] font-bold text-[#949ba4] uppercase px-1 mb-1">
+                      {group.name}
+                    </div>
+                    <div className="grid grid-cols-8 gap-0.5">
+                      {group.emojis.map((emoji) => (
+                        <button
+                          key={emoji}
+                          type="button"
+                          onClick={() => {
+                            setInputText((prev) => prev + emoji);
+                            setShowInputPicker(false);
+                          }}
+                          className="hover:bg-[#35373c] hover:scale-125 transition text-lg p-1 rounded"
+                          title={emoji}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Send Button */}
           {(inputText.trim() || previewAttachment) && (

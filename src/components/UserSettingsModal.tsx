@@ -3,7 +3,8 @@ import type { UserProfile } from '../types';
 import {
   getStoredSupabaseConfig,
   saveSupabaseConfig,
-  testSupabaseConnection
+  testSupabaseConnection,
+  getSupabase
 } from '../lib/supabase';
 import {
   X,
@@ -13,6 +14,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Copy,
+  Camera,
+  Trash2,
 } from 'lucide-react';
 
 interface UserSettingsModalProps {
@@ -36,6 +39,10 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
   const [displayName, setDisplayName] = useState(currentUser.display_name);
   const [customStatus, setCustomStatus] = useState(currentUser.custom_status || '');
   const [bio, setBio] = useState(currentUser.bio || '');
+  const [avatarUrl, setAvatarUrl] = useState(currentUser.avatar_url);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarFeedback, setAvatarFeedback] = useState('');
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
   // Supabase state
   const [supabaseUrl, setSupabaseUrl] = useState('');
@@ -63,6 +70,16 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
     const config = getStoredSupabaseConfig();
     setSupabaseUrl(config.url);
     setSupabaseAnonKey(config.anonKey);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setDisplayName(currentUser.display_name);
+      setCustomStatus(currentUser.custom_status || '');
+      setBio(currentUser.bio || '');
+      setAvatarUrl(currentUser.avatar_url);
+      setAvatarFeedback('');
+    }
   }, [isOpen]);
 
   // Mic test logic
@@ -117,7 +134,52 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
       display_name: displayName,
       custom_status: customStatus,
       bio,
+      avatar_url: avatarUrl,
     });
+  };
+
+  const persistAvatar = async (url: string) => {
+    onUpdateUser({ avatar_url: url });
+    const supabase = getSupabase();
+    if (!supabase) return;
+    const { data } = await supabase.auth.getUser();
+    const authId = data.user?.id;
+    if (!authId) return;
+    await supabase.from('profiles').upsert({ id: authId, avatar_url: url }, { onConflict: 'id' });
+  };
+
+  const handleAvatarFile = (fileList: FileList | null) => {
+    const file = fileList?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setAvatarFeedback('Escolha um arquivo de imagem.');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setAvatarFeedback('Imagem até 2MB.');
+      return;
+    }
+    setAvatarUploading(true);
+    setAvatarFeedback('');
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const url = reader.result as string;
+      setAvatarUrl(url);
+      await persistAvatar(url);
+      setAvatarUploading(false);
+      setAvatarFeedback('Foto atualizada!');
+    };
+    reader.onerror = () => {
+      setAvatarUploading(false);
+      setAvatarFeedback('Falha ao ler a imagem.');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveAvatar = async () => {
+    setAvatarUrl('');
+    await persistAvatar('');
+    setAvatarFeedback('Foto removida.');
   };
 
   const handleTestSupabase = async () => {
@@ -255,17 +317,60 @@ git push -u origin main`;
               <div className="bg-[#1e1f22] rounded-lg overflow-hidden border border-[#2b2d31]">
                 <div className="h-24 bg-gradient-to-r from-[#5865f2] to-[#7983f5]" />
                 <div className="px-5 pb-5 -mt-10 flex items-end justify-between">
-                  <div className="relative">
+                  <div className="relative group">
                     <img
-                      src={currentUser.avatar_url}
+                      src={avatarUrl}
                       alt={currentUser.username}
-                      className="w-20 h-20 rounded-full border-4 border-[#1e1f22] object-cover"
+                      className="w-20 h-20 rounded-full border-4 border-[#1e1f22] object-cover bg-[#2b2d31]"
                     />
                     <span className="absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-[#1e1f22] bg-[#23a55a]" />
+                    <button
+                      onClick={() => avatarInputRef.current?.click()}
+                      disabled={avatarUploading}
+                      title="Trocar foto de perfil"
+                      className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white text-[10px] font-semibold gap-1 transition disabled:opacity-50"
+                    >
+                      <Camera size={18} />
+                      <span>{avatarUploading ? 'Enviando...' : 'Trocar foto'}</span>
+                    </button>
+                    <input
+                      ref={avatarInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => handleAvatarFile(e.target.files)}
+                    />
                   </div>
+                  {avatarUrl && (
+                    <button
+                      onClick={handleRemoveAvatar}
+                      title="Remover foto"
+                      className="flex items-center gap-1 text-xs text-[#949ba4] hover:text-[#f23f43] transition"
+                    >
+                      <Trash2 size={14} />
+                      <span>Remover</span>
+                    </button>
+                  )}
                 </div>
 
+                {avatarFeedback && (
+                  <div className="px-5 -mt-2">
+                    <p className="text-xs text-[#949ba4]">{avatarFeedback}</p>
+                  </div>
+                )}
+
                 <div className="px-5 pb-5 space-y-4">
+                  <div>
+                    <label className="text-xs font-bold text-[#b5bac1] uppercase">URL da foto (opcional)</label>
+                    <input
+                      type="text"
+                      value={avatarUrl}
+                      onChange={(e) => setAvatarUrl(e.target.value)}
+                      onBlur={() => persistAvatar(avatarUrl)}
+                      placeholder="https://exemplo.com/foto.jpg ou suba pelo botão"
+                      className="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-xs text-white focus:outline-none focus:border-[#5865f2] mt-1 font-mono"
+                    />
+                  </div>
                   <div>
                     <label className="text-xs font-bold text-[#b5bac1] uppercase">Nome de Exibição</label>
                     <input

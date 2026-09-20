@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { UserProfile } from '../types';
-import { User, Sparkles, Check } from 'lucide-react';
+import { User, Sparkles, Check, Mail, LogOut } from 'lucide-react';
+import { getSupabase, signInWithEmail, verifyEmailCode, signOut, ensureProfile } from '../lib/supabase';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -24,12 +25,69 @@ export const LoginModal = ({
   currentUser,
   onSaveUser,
 }: LoginModalProps) => {
+  const [email, setEmail] = useState(currentUser.email || '');
+  const [code, setCode] = useState('');
+  const [step, setStep] = useState<'email' | 'code'>('email');
+  const [loading, setLoading] = useState(false);
+  const [feedback, setFeedback] = useState('');
   const [displayName, setDisplayName] = useState(currentUser.display_name);
   const [username, setUsername] = useState(currentUser.username);
   const [avatarUrl, setAvatarUrl] = useState(currentUser.avatar_url);
   const [customStatus, setCustomStatus] = useState(currentUser.custom_status || '');
 
   if (!isOpen) return null;
+
+  const finishLogin = async (authEmail: string) => {
+    const supabase = getSupabase();
+    const { data } = supabase ? await supabase.auth.getUser() : { data: null as any };
+    const authId = data?.user?.id;
+    if (!authId) {
+      setFeedback('Sessão ainda não confirmada. Clique no link do e-mail ou digite o código.');
+      return;
+    }
+    const profile: any = await ensureProfile(authId, authEmail, displayName.trim() || undefined);
+    onSaveUser({
+      ...currentUser,
+      id: authId,
+      email: authEmail,
+      username: profile?.username || username,
+      display_name: profile?.display_name || displayName.trim() || 'usuario',
+      avatar_url: avatarUrl || profile?.avatar_url || PRESET_AVATARS[0],
+      custom_status: customStatus.trim(),
+    });
+    setFeedback('Logado com e-mail!');
+    onClose();
+  };
+
+  const handleSendLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setFeedback('');
+    const res = await signInWithEmail(email);
+    setLoading(false);
+    setFeedback(res.message);
+    if (res.success) setStep('code');
+  };
+
+  const handleVerify = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    setLoading(true);
+    setFeedback('');
+    const res = await verifyEmailCode(email, code);
+    setLoading(false);
+    if (!res.success) {
+      setFeedback(res.message);
+      return;
+    }
+    await finishLogin(email.trim());
+  };
+
+  const handleLogout = async () => {
+    await signOut();
+    setStep('email');
+    setCode('');
+    setFeedback('Deslogado.');
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,7 +106,6 @@ export const LoginModal = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#111214]/80 backdrop-blur-xs">
       <div className="w-full max-w-md bg-[#313338] rounded-xl shadow-2xl border border-[#232428] overflow-hidden animate-scale-up">
-        {/* Banner */}
         <div className="h-20 bg-gradient-to-r from-[#5865f2] to-[#4752c4] relative flex items-end justify-center">
           <div className="absolute -bottom-8">
             <div className="relative">
@@ -65,16 +122,62 @@ export const LoginModal = ({
         <div className="pt-10 px-6 pb-6">
           <div className="text-center mb-4">
             <h3 className="text-xl font-bold text-white flex items-center justify-center gap-1.5">
-              <span>Identificação no DÉZCORD</span>
+              <span>Entrar no DÉZCORD</span>
               <Sparkles size={18} className="text-[#f0b232]" />
             </h3>
             <p className="text-xs text-[#949ba4] mt-0.5">
-              Defina seu nome e avatar local. Todas as mensagens e status atualizarão dinamicamente.
+              Login real por e-mail via Supabase. Sem senha.
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Display Name */}
+          <form onSubmit={handleSendLink} className="space-y-3 bg-[#2b2d31] p-3 rounded-lg border border-[#3f4147]">
+            <label className="text-[11px] font-bold text-[#b5bac1] uppercase tracking-wider flex items-center gap-1">
+              <Mail size={14} /> E-mail
+            </label>
+            <input
+              type="email"
+              required
+              placeholder="voce@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full bg-[#1e1f22] text-white px-3 py-2 rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#5865f2]"
+            />
+            <button
+              type="submit"
+              disabled={loading || !email.trim()}
+              className="w-full bg-[#5865f2] hover:bg-[#4752c4] disabled:opacity-50 text-white text-xs font-semibold py-2.5 rounded transition"
+            >
+              {loading ? 'Enviando...' : step === 'code' ? 'Reenviar link / código' : 'Enviar link de login'}
+            </button>
+
+            {step === 'code' && (
+              <div className="space-y-2 pt-1">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Código de 6 dígitos do e-mail"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  className="w-full bg-[#1e1f22] text-white px-3 py-2 rounded text-sm tracking-widest text-center focus:outline-none focus:ring-1 focus:ring-[#23a55a]"
+                />
+                <button
+                  type="button"
+                  onClick={handleVerify}
+                  disabled={loading || !code.trim()}
+                  className="w-full bg-[#23a55a] hover:bg-[#1f9350] disabled:opacity-50 text-white text-xs font-semibold py-2 rounded transition"
+                >
+                  Confirmar código
+                </button>
+              </div>
+            )}
+
+            {feedback && <p className="text-xs text-[#dbdee1]">{feedback}</p>}
+            <button type="button" onClick={handleLogout} className="flex items-center gap-1 text-xs text-[#949ba4] hover:text-white">
+              <LogOut size={14} /> Sair da conta
+            </button>
+          </form>
+
+          <form onSubmit={handleSubmit} className="space-y-4 mt-4">
             <div>
               <label className="text-[11px] font-bold text-[#b5bac1] uppercase tracking-wider">
                 NOME DE EXIBIÇÃO
@@ -89,7 +192,6 @@ export const LoginModal = ({
               />
             </div>
 
-            {/* Username */}
             <div>
               <label className="text-[11px] font-bold text-[#b5bac1] uppercase tracking-wider">
                 NOME DE USUÁRIO (@TAG)
@@ -106,7 +208,6 @@ export const LoginModal = ({
               </div>
             </div>
 
-            {/* Custom Status */}
             <div>
               <label className="text-[11px] font-bold text-[#b5bac1] uppercase tracking-wider">
                 STATUS PERSONALIZADO
@@ -120,7 +221,6 @@ export const LoginModal = ({
               />
             </div>
 
-            {/* Choose Avatar Presets */}
             <div>
               <label className="text-[11px] font-bold text-[#b5bac1] uppercase tracking-wider">
                 ESCOLHER AVATAR
@@ -146,7 +246,6 @@ export const LoginModal = ({
               </div>
             </div>
 
-            {/* Custom Avatar URL */}
             <div>
               <label className="text-[11px] font-bold text-[#b5bac1] uppercase tracking-wider">
                 OU URL DE IMAGEM PERSONALIZADA
@@ -160,7 +259,6 @@ export const LoginModal = ({
               />
             </div>
 
-            {/* Footer Buttons */}
             <div className="pt-3 flex gap-2">
               <button
                 type="button"

@@ -12,8 +12,10 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   custom_status TEXT DEFAULT '',
   bio TEXT DEFAULT '',
   banner_color TEXT DEFAULT '#5865F2',
+  email TEXT DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT now() NOT NULL
 );
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT DEFAULT '';
 
 -- 2. Servidores
 CREATE TABLE IF NOT EXISTS public.servers (
