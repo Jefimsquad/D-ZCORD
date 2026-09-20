@@ -4,8 +4,19 @@ const STORAGE_URL_KEY = 'dezcord_supabase_url';
 const STORAGE_ANON_KEY = 'dezcord_supabase_anon_key';
 
 export function getStoredSupabaseConfig() {
-  const url = localStorage.getItem(STORAGE_URL_KEY) || import.meta.env.VITE_SUPABASE_URL || '';
-  const anonKey = localStorage.getItem(STORAGE_ANON_KEY) || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+  const envUrl = ((import.meta as any).env?.VITE_SUPABASE_URL || '').trim();
+  const envKey = ((import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '').trim();
+  let lsUrl = '';
+  let lsKey = '';
+  try {
+    lsUrl = (localStorage.getItem(STORAGE_URL_KEY) || '').trim();
+    lsKey = (localStorage.getItem(STORAGE_ANON_KEY) || '').trim();
+  } catch {
+    // localStorage indisponível (SSR/privado) — usa só env
+  }
+  // ENV tem prioridade: corrige caso o navegador tenha valor antigo/inválido salvo
+  const url = envUrl || lsUrl;
+  const anonKey = envKey || lsKey;
   return { url, anonKey };
 }
 
