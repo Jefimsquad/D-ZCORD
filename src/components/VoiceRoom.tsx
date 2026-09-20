@@ -47,7 +47,9 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
     if (!isMuted) {
       navigator.mediaDevices
-        ?.getUserMedia({ audio: true })
+        ?.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        })
         .then((stream) => {
           micStream = stream;
           audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -286,6 +288,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                 ref={screenRef}
                 autoPlay
                 playsInline
+                muted
                 className="w-full h-full object-contain rounded"
               />
               <div className="absolute bottom-3 left-3 bg-[#111214]/80 backdrop-blur px-3 py-1 rounded text-xs text-white">
