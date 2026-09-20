@@ -48,7 +48,14 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     if (!isMuted) {
       navigator.mediaDevices
         ?.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 48000,
+            sampleSize: 16,
+            channelCount: 1,
+          },
         })
         .then((stream) => {
           micStream = stream;
@@ -227,7 +234,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
         </div>
         <div className="flex items-center gap-2 text-xs text-[#23a55a]">
           <span className="w-2 h-2 rounded-full bg-[#23a55a] animate-ping" />
-          <span>Qualidade de Áudio 64kbps</span>
+          <span>Captura HD 48kHz • Eco cancelado</span>
         </div>
       </div>
 

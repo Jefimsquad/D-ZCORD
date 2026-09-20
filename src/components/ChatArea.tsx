@@ -31,6 +31,36 @@ interface ChatAreaProps {
   isBotTyping?: boolean;
 }
 
+const isSameDay = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() &&
+  a.getMonth() === b.getMonth() &&
+  a.getDate() === b.getDate();
+
+// Estilo Discord: "Hoje às 14:32", "Ontem às 14:32" ou "20/09/2026 14:32"
+const formatMessageTimestamp = (iso: string) => {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const now = new Date();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (isSameDay(d, now)) return `Hoje às ${time}`;
+  if (isSameDay(d, yesterday)) return `Ontem às ${time}`;
+  return `${d.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: 'numeric' })} ${time}`;
+};
+
+// Divisória de dia estilo Discord: "20 de setembro de 2026"
+const formatDayDivider = (iso: string) => {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const now = new Date();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (isSameDay(d, now)) return 'Hoje';
+  if (isSameDay(d, yesterday)) return 'Ontem';
+  return d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
+};
+
 const EMOJI_GROUPS: { name: string; emojis: string[] }[] = [
   { name: 'Rostos', emojis: ['😀', '😁', '😂', '🤣', '😊', '😍', '😎', '🤔', '😴', '😭', '😡', '🥳', '😱', '🤖', '👻', '💀'] },
   { name: 'Gestos', emojis: ['👍', '👎', '👏', '🙏', '💪', '👀', '🫡', '✌️', '🤝', '👋', '🫶', '👌'] },
@@ -226,18 +256,29 @@ export const ChatArea = ({
         </div>
 
         {/* Message Items */}
-        {messages.map((message) => {
+        {messages.map((message, idx) => {
           const isCurrentUser = message.user_id === currentUser.id;
-          const timeString = new Date(message.created_at).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-          });
+          const timeString = formatMessageTimestamp(message.created_at);
+          const fullDate = new Date(message.created_at).toLocaleString('pt-BR');
+          const prev = idx > 0 ? messages[idx - 1] : null;
+          const showDayDivider =
+            !prev ||
+            !isSameDay(new Date(prev.created_at), new Date(message.created_at));
 
           return (
-            <div
-              key={message.id}
-              className="group relative flex gap-3 px-2 py-1.5 -mx-2 rounded hover:bg-[#2e3035] transition duration-150"
-            >
+            <div key={message.id}>
+              {showDayDivider && (
+                <div className="flex items-center gap-3 my-4">
+                  <div className="flex-1 h-px bg-[#35373c]/60" />
+                  <span className="text-[11px] font-bold text-[#949ba4] uppercase">
+                    {formatDayDivider(message.created_at)}
+                  </span>
+                  <div className="flex-1 h-px bg-[#35373c]/60" />
+                </div>
+              )}
+              <div
+                className="group relative flex gap-3 px-2 py-1.5 -mx-2 rounded hover:bg-[#2e3035] transition duration-150"
+              >
               {/* Message Actions Toolbar (Hover) */}
               <div className="absolute right-3 -top-3 hidden group-hover:flex items-center bg-[#313338] border border-[#232428] rounded-md shadow-md overflow-hidden z-10">
                 {/* Add Emoji */}
@@ -337,7 +378,7 @@ export const ChatArea = ({
                       <span>BOT IA</span>
                     </span>
                   )}
-                  <span className="text-[11px] text-[#949ba4]">{timeString}</span>
+                  <span className="text-[11px] text-[#949ba4]" title={fullDate}>{timeString}</span>
                 </div>
 
                 {/* Content */}
@@ -385,6 +426,7 @@ export const ChatArea = ({
                     })}
                   </div>
                 )}
+              </div>
               </div>
             </div>
           );

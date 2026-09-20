@@ -106,14 +106,41 @@ export async function signOut(): Promise<void> {
   if (supabase) await supabase.auth.signOut();
 }
 
-export async function signUpWithPassword(email: string, password: string): Promise<{ success: boolean; message: string; needsConfirm?: boolean }> {
+export async function signUpWithPassword(
+  email: string,
+  password: string,
+  opts?: { displayName?: string; avatarUrl?: string }
+): Promise<{ success: boolean; message: string; needsConfirm?: boolean }> {
   const supabase = getSupabase();
   if (!supabase) return { success: false, message: 'Supabase não configurado.' };
+  const displayName = opts?.displayName?.trim();
+  const avatarUrl = opts?.avatarUrl?.trim();
   const { data, error } = await supabase.auth.signUp({ email: email.trim(), password });
   if (error) return { success: false, message: error.message };
   if (data.session?.user) {
-    await ensureProfile(data.session.user.id, email.trim());
+    await ensureProfile(data.session.user.id, email.trim(), displayName || undefined, avatarUrl || undefined);
+    if (displayName || avatarUrl) {
+      await supabase.from('profiles').update({
+        ...(displayName ? { display_name: displayName } : {}),
+        ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+      }).eq('id', data.session.user.id);
+    }
     return { success: true, message: 'Conta criada e logada!' };
+  }
+  // Sem sessão (confirmação de e-mail ativa): já deixa o perfil com nickname/foto escolhidos
+  if (data.user?.id) {
+    const base = email.trim().split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '_') || 'usuario';
+    await supabase.from('profiles').upsert(
+      {
+        id: data.user.id,
+        username: base,
+        display_name: displayName || base,
+        avatar_url: avatarUrl || '',
+        status: 'online',
+        email: email.trim(),
+      },
+      { onConflict: 'id' }
+    );
   }
   return { success: true, needsConfirm: true, message: 'Conta criada! Confirme no e-mail e depois entre.' };
 }
@@ -129,7 +156,7 @@ export async function signInWithPassword(email: string, password: string): Promi
   return { success: true, message: 'Bem-vindo ao DÉZCORD!' };
 }
 
-export async function ensureProfile(authId: string, email: string, displayName?: string) {
+export async function ensureProfile(authId: string, email: string, displayName?: string, avatarUrl?: string) {
   const supabase = getSupabase();
   if (!supabase) return null;
   const base = email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '_') || 'usuario';
@@ -148,7 +175,7 @@ export async function ensureProfile(authId: string, email: string, displayName?:
       id: authId,
       username: uname,
       display_name: displayName || uname,
-      avatar_url: '',
+      avatar_url: avatarUrl || '',
       status: 'online',
       email,
     };
