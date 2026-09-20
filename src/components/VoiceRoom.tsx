@@ -28,8 +28,11 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   const [isVideoOn, setIsVideoOn] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const screenRef = useRef<HTMLVideoElement | null>(null);
+  const videoStreamRef = useRef<MediaStream | null>(null);
+  const screenStreamRef = useRef<MediaStream | null>(null);
 
   // Microphonic voice detection using Web Audio API
   useEffect(() => {
@@ -80,51 +83,106 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     };
   }, [isMuted]);
 
+  // Attach camera stream once <video> is mounted (fixes black screen:
+  // stream was set before conditional video element existed)
+  useEffect(() => {
+    if (isVideoOn && videoRef.current && videoStreamRef.current) {
+      videoRef.current.srcObject = videoStreamRef.current;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [isVideoOn]);
+
+  // Attach screen stream once <video> is mounted
+  useEffect(() => {
+    if (isScreenSharing && screenRef.current && screenStreamRef.current) {
+      screenRef.current.srcObject = screenStreamRef.current;
+      screenRef.current.play().catch(() => {});
+    }
+  }, [isScreenSharing]);
+
+  // Stop all tracks on unmount (leave channel / close tab)
+  useEffect(() => {
+    return () => {
+      videoStreamRef.current?.getTracks().forEach((t) => t.stop());
+      screenStreamRef.current?.getTracks().forEach((t) => t.stop());
+      videoStreamRef.current = null;
+      screenStreamRef.current = null;
+    };
+  }, []);
+
   // Handle Video Camera toggle
   const toggleCamera = async () => {
+    setError(null);
     if (!isVideoOn) {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error('Navegador sem suporte a câmera (use HTTPS/localhost)');
         }
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        videoStreamRef.current = stream;
         setIsVideoOn(true);
-      } catch (err) {
+      } catch (err: any) {
         console.warn('Câmera indisponível:', err);
+        setError(
+          err?.name === 'NotAllowedError'
+            ? 'Permissão de câmera negada. Libere no navegador e tente de novo.'
+            : 'Câmera indisponível neste dispositivo/navegador.'
+        );
       }
     } else {
-      if (videoRef.current && videoRef.current.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach((t) => t.stop());
-        videoRef.current.srcObject = null;
-      }
+      videoStreamRef.current?.getTracks().forEach((t) => t.stop());
+      videoStreamRef.current = null;
+      if (videoRef.current) videoRef.current.srcObject = null;
       setIsVideoOn(false);
     }
   };
 
   // Handle Screen Share toggle
   const toggleScreenShare = async () => {
+    setError(null);
     if (!isScreenSharing) {
       try {
-        const stream = await (navigator.mediaDevices as any).getDisplayMedia({ video: true });
-        if (screenRef.current) {
-          screenRef.current.srcObject = stream;
+        if (!navigator.mediaDevices?.getDisplayMedia) {
+          throw new Error('Navegador sem suporte a compartilhamento (use Chrome/Edge HTTPS)');
         }
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: true,
+        });
+        if (!stream.getVideoTracks().length) {
+          throw new Error('Nenhuma trilha de vídeo retornada');
+        }
+        screenStreamRef.current = stream;
         stream.getVideoTracks()[0].onended = () => {
+          screenStreamRef.current?.getTracks().forEach((t) => t.stop());
+          screenStreamRef.current = null;
+          if (screenRef.current) screenRef.current.srcObject = null;
           setIsScreenSharing(false);
         };
         setIsScreenSharing(true);
-      } catch (err) {
-        console.warn('Compartilhamento cancelado:', err);
+      } catch (err: any) {
+        // AbortError / NotAllowedError = usuário cancelou, não mostra erro
+        if (err?.name === 'NotAllowedError' || err?.name === 'AbortError') {
+          console.warn('Compartilhamento cancelado:', err);
+          return;
+        }
+        console.warn('Compartilhamento falhou:', err);
+        setError('Falha ao compartilhar tela. Use Chrome/Edge em HTTPS ou localhost.');
       }
     } else {
-      if (screenRef.current && screenRef.current.srcObject) {
-        const stream = screenRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach((t) => t.stop());
-        screenRef.current.srcObject = null;
-      }
+      screenStreamRef.current?.getTracks().forEach((t) => t.stop());
+      screenStreamRef.current = null;
+      if (screenRef.current) screenRef.current.srcObject = null;
       setIsScreenSharing(false);
     }
+  };
+
+  const handleDisconnect = () => {
+    videoStreamRef.current?.getTracks().forEach((t) => t.stop());
+    screenStreamRef.current?.getTracks().forEach((t) => t.stop());
+    videoStreamRef.current = null;
+    screenStreamRef.current = null;
+    onDisconnect();
   };
 
   return (
@@ -145,7 +203,12 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
       </div>
 
       {/* Participants Video / Grid View */}
-      <div className="flex-1 p-6 overflow-y-auto flex items-center justify-center">
+      <div className="flex-1 p-6 overflow-y-auto flex flex-col items-center justify-center gap-4">
+        {error && (
+          <div className="max-w-5xl w-full bg-[#f23f43]/15 border border-[#f23f43]/40 text-[#ffa7a9] text-sm px-4 py-2 rounded-lg">
+            {error}
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl w-full">
           {/* Current User Tile */}
           <div className="relative bg-[#1e1f22] rounded-xl aspect-video flex flex-col items-center justify-center p-4 border border-[#35373c] shadow-lg overflow-hidden group">
@@ -261,7 +324,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
         {/* Disconnect Call */}
         <button
-          onClick={onDisconnect}
+          onClick={handleDisconnect}
           className="p-3.5 rounded-full bg-[#f23f43] hover:bg-[#da373b] text-white transition ml-4"
           title="Desconectar do canal de voz"
         >
