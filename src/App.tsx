@@ -145,7 +145,10 @@ export function App() {
       });
     }
     const supabase = getSupabase();
-    if (!supabase) return;
+    if (!supabase) {
+      setAuthChecked(true);
+      return;
+    }
     supabase.auth.getSession().then(async ({ data }) => {
       const user = data.session?.user;
       setAuthed(!!user?.id);
@@ -160,6 +163,9 @@ export function App() {
         display_name: (profile as any)?.display_name || prev.display_name,
         avatar_url: (profile as any)?.avatar_url || prev.avatar_url,
       }));
+    }).catch(() => {
+      setAuthed(false);
+      setAuthChecked(true);
     });
     const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT' || !session?.user) {
