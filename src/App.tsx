@@ -371,9 +371,15 @@ export function App() {
   const activeChannel = activeServer?.channels.find((c) => c.id === activeChannelId) || null;
 
   // Presença de voz em tempo real (quem está em cada call)
-  const voiceChannelIds = activeServer
-    ? activeServer.channels.filter((c) => c.type === 'voice').map((c) => c.id)
-    : [];
+  // Escuta TODOS os canais de voz de todos os projetos + call ativa:
+  // se escutar só o servidor aberto, você não vê quem entra em outra call
+  // e trocar de servidor te tira da lista.
+  const voiceChannelIds = [
+    ...new Set([
+      ...servers.flatMap((s) => s.channels.filter((c) => c.type === 'voice').map((c) => c.id)),
+      ...(activeVoiceChannel ? [activeVoiceChannel.id] : []),
+    ]),
+  ];
   // Flags de mídia local (câmera/tela) para publicar na presença
   const [voiceMedia, setVoiceMedia] = useState<LocalMediaFlags>(NO_MEDIA);
 
@@ -381,7 +387,7 @@ export function App() {
     voiceChannelIds,
     currentUser,
     isMuted,
-    isSupabaseConnected && authed,
+    isSupabaseConnected,
     activeVoiceChannel?.id || null,
     voiceMedia
   );
@@ -396,7 +402,7 @@ export function App() {
     activeVoiceChannel?.id || '',
     currentUser,
     isMuted,
-    isSupabaseConnected && authed && !!activeVoiceChannel,
+    isSupabaseConnected && !!activeVoiceChannel,
     (activeVoiceChannel ? voicePresence[activeVoiceChannel.id] : undefined) || [],
     (flags) => setVoiceMedia(flags)
   );
@@ -866,7 +872,7 @@ Recomendo dividir o fluxo em:
           onToggleMute={() => setIsMuted(!isMuted)}
           onOpenChannelList={() => setShowChannelsMobile(true)}
           participants={voicePresence[activeChannel.id] || []}
-          isSupabaseConnected={isSupabaseConnected && authed}
+          isSupabaseConnected={isSupabaseConnected}
           callMicStream={voiceCall.micStream}
           callMicError={voiceCall.micError}
           callRemotes={voiceCall.remotes}

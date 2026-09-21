@@ -16,7 +16,12 @@ export function useVoicePresence(
 ): Record<string, VoicePeerInfo[]> {
   const [presence, setPresence] = useState<Record<string, VoicePeerInfo[]>>({});
   const channelsRef = useRef<Map<string, RealtimeChannel>>(new Map());
-  const key = channelIds.slice().sort().join(',');
+  // Inclui o canal da call ativa mesmo se trocar de servidor/navegar —
+  // senão a inscrição some e ninguém mais te vê (e você não vê ninguém).
+  const effectiveIds = [
+    ...new Set([...(channelIds || []), ...(joinedChannelId ? [joinedChannelId] : [])].filter(Boolean)),
+  ];
+  const key = effectiveIds.slice().sort().join(',');
   const userId = localUser.id;
 
   const isMutedRef = useRef(isMuted);
@@ -63,27 +68,40 @@ export function useVoicePresence(
       setPresence(next);
     };
 
-    channelIds.forEach((cid) => {
+    effectiveIds.forEach((cid) => {
       const ch = supabase.channel(`voice-presence:${cid}`, {
         config: { presence: { key: userId } },
       });
       chans.set(cid, ch);
       ch.on('presence', { event: 'sync' }, rebuild)
-        .on('presence', { event: 'join' }, rebuild)
+        .on('presence', { event: 'join' }, (payload) => {
+          // Força rebuild no próximo tick: presenceState já inclui quem entrou
+          setTimeout(rebuild, 0);
+          void payload;
+        })
         .on('presence', { event: 'leave' }, rebuild)
-        .subscribe((status) => {
-          // Só publica presença no canal que entrou (inscrição escuta todos)
-          if (status === 'SUBSCRIBED' && cid === joinedRef.current) {
-            ch.track({
-              user_id: userId,
-              display_name: profileRef.current.display_name,
-              avatar_url: profileRef.current.avatar_url,
-              muted: isMutedRef.current,
-              video: !!mediaRef.current?.video,
-              screensharing: !!mediaRef.current?.screensharing,
-              camStreamId: mediaRef.current?.camStreamId || '',
-              screenStreamId: mediaRef.current?.screenStreamId || '',
-            });
+        .subscribe(async (status) => {
+          if (status === 'SUBSCRIBED') {
+            rebuild();
+            // Só publica presença no canal que entrou (inscrição escuta todos)
+            if (cid === joinedRef.current) {
+              try {
+                await ch.track({
+                  user_id: userId,
+                  display_name: profileRef.current.display_name,
+                  avatar_url: profileRef.current.avatar_url,
+                  muted: isMutedRef.current,
+                  video: !!mediaRef.current?.video,
+                  screensharing: !!mediaRef.current?.screensharing,
+                  camStreamId: mediaRef.current?.camStreamId || '',
+                  screenStreamId: mediaRef.current?.screenStreamId || '',
+                });
+              } catch {
+                /* retry no efeito de tracking abaixo */
+              }
+              // Garante que a lista local reflita imediatamente
+              setTimeout(rebuild, 300);
+            }
           }
         });
     });
@@ -112,9 +130,18 @@ export function useVoicePresence(
           screensharing: !!media?.screensharing,
           camStreamId: media?.camStreamId || '',
           screenStreamId: media?.screenStreamId || '',
-        });
+        }).catch(() => {});
       } else {
-        ch.untrack();
+        // Só sai se estava dentro — evita broadcast de leave desnecessário
+        try {
+          const state = ch.presenceState() as Record<string, Array<Record<string, unknown>>>;
+          const stillThere = Object.values(state).some((metas) =>
+            metas.some((m) => String((m as Record<string, unknown>)?.user_id) === String(userId))
+          );
+          if (stillThere) ch.untrack().catch(() => {});
+        } catch {
+          /* ignora */
+        }
       }
     });
   }, [joinedChannelId, isMuted, userId, localUser.display_name, localUser.avatar_url, media?.video, media?.screensharing, media?.camStreamId, media?.screenStreamId]);
