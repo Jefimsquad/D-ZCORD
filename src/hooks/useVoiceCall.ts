@@ -93,7 +93,12 @@ export function useVoiceCall(
         enc.maxBitrate = mobile ? 700_000 : 1_200_000;
         enc.maxFramerate = mobile ? 24 : 30;
         params.degradationPreference = 'maintain-framerate';
-      } else {
+      } else if (kind === 'screen' && isMobileDevice()) {
+        // Celular: sempre 720p 30fps fixos
+        enc.maxBitrate = 3_000_000;
+        enc.maxFramerate = 30;
+        params.degradationPreference = 'maintain-resolution';
+      } else if (kind === 'screen') {
         // Tela segue a escada automática (screenLevelRef); cai sozinha se travar
         const lvl = SCREEN_LADDER[screenLevelRef.current] || SCREEN_LADDER[0];
         enc.maxBitrate = lvl.bitrate;
@@ -236,7 +241,7 @@ export function useVoiceCall(
   // Controlador automático: monitora stats e desce/sobe a escada
   const screenCtlRef = useRef({ lastChange: 0, goodStreak: 0, framesSent: -1, ts: 0 });
   useEffect(() => {
-    if (!enabled || !screenOn) return;
+    if (!enabled || !screenOn || isMobileDevice()) return;
     const id = setInterval(async () => {
       const videoTrackId = screenTracksRef.current.find((t) => t.kind === 'video')?.id;
       if (!videoTrackId) return;
@@ -606,10 +611,11 @@ export function useVoiceCall(
       if (!navigator.mediaDevices?.getDisplayMedia) {
         throw new Error('Navegador sem suporte a compartilhamento (use Chrome/Edge HTTPS)');
       }
+      const mobile = isMobileDevice();
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: {
-          width: { max: 1920 },
-          height: { max: 1080 },
+          width: { max: mobile ? 1280 : 1920 },
+          height: { max: mobile ? 720 : 1080 },
           frameRate: { max: 30 },
         },
         audio: true,

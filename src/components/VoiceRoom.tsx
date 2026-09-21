@@ -91,28 +91,43 @@ const RemoteScreenTile = ({ peerName, stream }: { peerName: string; stream: Medi
     document.addEventListener('fullscreenchange', onFs);
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
+  const toggleFs = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        if (containerRef.current?.requestFullscreen) {
+          await containerRef.current.requestFullscreen();
+        } else {
+          // iOS: só vídeo entra em tela cheia
+          const video = containerRef.current?.querySelector('video') as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
+          video?.webkitEnterFullscreen?.();
+        }
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch {
+      /* ignorado */
+    }
+  };
   return (
     <div
       ref={containerRef}
-      className="relative bg-black rounded-xl aspect-video flex flex-col items-center justify-center p-2 border border-[#23a55a] shadow-lg overflow-hidden col-span-2"
+      onClick={toggleFs}
+      className="relative bg-black rounded-xl aspect-video flex flex-col items-center justify-center p-2 border border-[#23a55a] shadow-lg overflow-hidden col-span-2 cursor-pointer"
+      title="Toque para tela cheia"
     >
-      <RemoteVideoEl stream={stream} audio className="w-full h-full object-contain rounded" />
-      <div className="absolute bottom-3 left-3 bg-[#111214]/80 backdrop-blur px-3 py-1 rounded text-xs text-white">
-        Transmissão de Tela de {peerName} • ao vivo
+      <RemoteVideoEl stream={stream} audio className="w-full h-full object-contain rounded pointer-events-none" />
+      <div className="absolute bottom-3 left-3 bg-[#111214]/80 backdrop-blur px-3 py-1 rounded text-xs text-white pointer-events-none">
+        Transmissão de Tela de {peerName} • ao vivo • toque p/ ampliar
       </div>
       <button
-        onClick={async () => {
-          try {
-            if (!document.fullscreenElement) await containerRef.current?.requestFullscreen();
-            else await document.exitFullscreen();
-          } catch {
-            /* ignorado */
-          }
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleFs();
         }}
-        className="absolute top-3 right-3 p-2 rounded-lg bg-[#111214]/80 hover:bg-[#5865f2] text-white transition"
+        className="absolute top-3 right-3 p-3 md:p-2 rounded-lg bg-[#111214]/80 hover:bg-[#5865f2] text-white transition"
         title={fs ? 'Sair da tela cheia' : 'Ver em tela cheia'}
       >
-        {fs ? <Minimize size={18} /> : <Maximize size={18} />}
+        {fs ? <Minimize size={20} /> : <Maximize size={20} />}
       </button>
     </div>
   );
@@ -254,11 +269,16 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
-  // Tela cheia no container do compartilhamento
+  // Tela cheia no container do compartilhamento (com fallback iOS)
   const toggleScreenFullscreen = async () => {
     try {
       if (!document.fullscreenElement) {
-        await screenContainerRef.current?.requestFullscreen();
+        if (screenContainerRef.current?.requestFullscreen) {
+          await screenContainerRef.current.requestFullscreen();
+        } else {
+          const video = screenContainerRef.current?.querySelector('video') as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
+          video?.webkitEnterFullscreen?.();
+        }
       } else {
         await document.exitFullscreen();
       }
@@ -365,25 +385,30 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
           {screenOn && callScreen && (
             <div
               ref={screenContainerRef}
-              className="relative bg-black rounded-xl aspect-video flex flex-col items-center justify-center p-2 border border-[#5865f2] shadow-lg overflow-hidden col-span-2"
+              onClick={toggleScreenFullscreen}
+              className="relative bg-black rounded-xl aspect-video flex flex-col items-center justify-center p-2 border border-[#5865f2] shadow-lg overflow-hidden col-span-2 cursor-pointer"
+              title="Toque para tela cheia"
             >
               <video
                 ref={screenRef}
                 autoPlay
                 playsInline
                 muted
-                className="w-full h-full object-contain rounded"
+                className="w-full h-full object-contain rounded pointer-events-none"
               />
-              <div className="absolute bottom-3 left-3 bg-[#111214]/80 backdrop-blur px-3 py-1 rounded text-xs text-white">
+              <div className="absolute bottom-3 left-3 bg-[#111214]/80 backdrop-blur px-3 py-1 rounded text-xs text-white pointer-events-none">
                 Transmissão de Tela de {currentUser.display_name}
-                {isSupabaseConnected && ` • ao vivo para a call${screenQuality ? ` • ${screenQuality}` : ''}`}
+                {isSupabaseConnected && ` • ao vivo para a call${screenQuality ? ` • ${screenQuality}` : ''} • toque p/ ampliar`}
               </div>
               <button
-                onClick={toggleScreenFullscreen}
-                className="absolute top-3 right-3 p-2 rounded-lg bg-[#111214]/80 hover:bg-[#5865f2] text-white transition"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleScreenFullscreen();
+                }}
+                className="absolute top-3 right-3 p-3 md:p-2 rounded-lg bg-[#111214]/80 hover:bg-[#5865f2] text-white transition"
                 title={isScreenFullscreen ? 'Sair da tela cheia' : 'Ver em tela cheia'}
               >
-                {isScreenFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+                {isScreenFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
               </button>
             </div>
           )}
