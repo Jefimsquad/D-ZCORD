@@ -36,6 +36,7 @@ interface VoiceRoomProps {
   callRemoteVideos?: RemoteVideo[];
   onToggleCamera?: () => void;
   onToggleScreen?: () => void;
+  screenQuality?: string;
 }
 
 export const RemoteAudioEl = ({ stream }: { stream: MediaStream }) => {
@@ -138,6 +139,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   callRemoteVideos = [],
   onToggleCamera,
   onToggleScreen,
+  screenQuality = '',
 }) => {
   const remotePeers = participants.filter((p) => p.user_id !== currentUser.id);
   const canShareScreen =
@@ -374,7 +376,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
               />
               <div className="absolute bottom-3 left-3 bg-[#111214]/80 backdrop-blur px-3 py-1 rounded text-xs text-white">
                 Transmissão de Tela de {currentUser.display_name}
-                {isSupabaseConnected && ' • ao vivo para a call'}
+                {isSupabaseConnected && ` • ao vivo para a call${screenQuality ? ` • ${screenQuality}` : ''}`}
               </div>
               <button
                 onClick={toggleScreenFullscreen}
