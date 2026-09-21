@@ -63,10 +63,10 @@ export const DirectMessagesView: React.FC<DirectMessagesViewProps> = ({
           <div className="w-[1px] h-4 bg-[#4e5058]" />
 
           {/* Navigation Tabs */}
-          <div className="flex items-center gap-3 text-sm font-medium">
+          <div className="flex items-center gap-1.5 md:gap-3 text-sm font-medium overflow-x-auto min-w-0">
             <button
               onClick={() => setTab('online')}
-              className={`px-2 py-1 rounded transition ${
+              className={`px-2 py-1 rounded transition whitespace-nowrap shrink-0 ${
                 tab === 'online'
                   ? 'bg-[#404249] text-white'
                   : 'text-[#b5bac1] hover:bg-[#35373c] hover:text-[#dbdee1]'
@@ -76,7 +76,7 @@ export const DirectMessagesView: React.FC<DirectMessagesViewProps> = ({
             </button>
             <button
               onClick={() => setTab('all')}
-              className={`px-2 py-1 rounded transition ${
+              className={`px-2 py-1 rounded transition whitespace-nowrap shrink-0 ${
                 tab === 'all'
                   ? 'bg-[#404249] text-white'
                   : 'text-[#b5bac1] hover:bg-[#35373c] hover:text-[#dbdee1]'
@@ -86,7 +86,7 @@ export const DirectMessagesView: React.FC<DirectMessagesViewProps> = ({
             </button>
             <button
               onClick={() => setTab('add')}
-              className={`px-2.5 py-1 rounded transition font-semibold ${
+              className={`px-2.5 py-1 rounded transition font-semibold whitespace-nowrap shrink-0 ${
                 tab === 'add'
                   ? 'bg-[#23a55a] text-white'
                   : 'bg-[#23a55a]/20 text-[#23a55a] hover:bg-[#23a55a] hover:text-white'

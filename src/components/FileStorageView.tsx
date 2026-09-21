@@ -197,9 +197,9 @@ export const FileStorageView = ({
         </div>
 
         {/* Action Buttons & Filters */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 shrink-0">
           {/* Search Box */}
-          <div className="relative flex items-center">
+          <div className="relative hidden sm:flex items-center">
             <input
               type="text"
               placeholder="Buscar arquivo..."
@@ -211,7 +211,7 @@ export const FileStorageView = ({
           </div>
 
           {/* Filter Pills */}
-          <div className="flex bg-[#1e1f22] p-0.5 rounded text-xs text-[#949ba4]">
+          <div className="hidden lg:flex bg-[#1e1f22] p-0.5 rounded text-xs text-[#949ba4]">
             <button
               onClick={() => setFilter('all')}
               className={`px-2.5 py-1 rounded transition ${
@@ -245,7 +245,7 @@ export const FileStorageView = ({
             title="Criar Pasta"
           >
             <FolderPlus size={16} className="text-[#f0b232]" />
-            <span>Nova Pasta</span>
+            <span className="hidden sm:inline">Nova Pasta</span>
           </button>
 
           {/* Upload Button */}
@@ -255,7 +255,7 @@ export const FileStorageView = ({
             title="Upload de Arquivos"
           >
             <Upload size={16} />
-            <span>Upload</span>
+            <span className="hidden sm:inline">Upload</span>
           </button>
           <input
             ref={fileInputRef}
