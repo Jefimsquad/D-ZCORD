@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { Server, Channel, Message, UserProfile, FileFolder, ProjectFile, ProjectTask } from './types';
 import {
   currentUser as initialCurrentUser,
@@ -679,6 +679,28 @@ Recomendo dividir o fluxo em:
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
   };
 
+  // Swipe da borda esquerda abre a gaveta de canais (mobile, estilo Discord)
+  const edgeSwipeRef = useRef<{ x: number; y: number } | null>(null);
+  const isMobileView = () => typeof window !== 'undefined' && window.innerWidth < 768;
+
+  const handleEdgeTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    if (t.clientX < 28 && isMobileView() && !showChannelsMobile) {
+      edgeSwipeRef.current = { x: t.clientX, y: t.clientY };
+    }
+  };
+  const handleEdgeTouchMove = (e: React.TouchEvent) => {
+    const s = edgeSwipeRef.current;
+    if (!s) return;
+    const t = e.touches[0];
+    const dx = t.clientX - s.x;
+    const dy = t.clientY - s.y;
+    if (dx > 70 && Math.abs(dx) > Math.abs(dy) * 2) {
+      edgeSwipeRef.current = null;
+      setShowChannelsMobile(true);
+    }
+  };
+
   // Active channel messages
   const currentMessages = activeChannel ? messagesMap[activeChannel.id] || [] : [];
 
@@ -695,7 +717,14 @@ Recomendo dividir o fluxo em:
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#313338] text-[#dbdee1] font-sans antialiased">
+    <div
+      className="flex h-screen w-screen overflow-hidden bg-[#313338] text-[#dbdee1] font-sans antialiased"
+      onTouchStart={handleEdgeTouchStart}
+      onTouchMove={handleEdgeTouchMove}
+      onTouchEnd={() => {
+        edgeSwipeRef.current = null;
+      }}
+    >
       {/* 1. Project / Server Sidebar (Far Left) */}
       <ServerSidebar
         servers={servers}
