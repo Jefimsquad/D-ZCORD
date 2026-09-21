@@ -115,6 +115,10 @@ export function App() {
   // Membros: mock + Supabase profiles + usuário atual (sincronizado)
   const [allMembers, setAllMembers] = useState<UserProfile[]>(sampleUsers);
 
+  // Ref do "eu" real (para nunca duplicar o mock local com a conta logada)
+  const selfRef = useRef({ authed: false, id: '' });
+  selfRef.current = { authed, id: currentUser.id };
+
   // Sincroniza perfis do Supabase com a barra lateral de membros
   useEffect(() => {
     const supabase = getSupabase();
@@ -133,10 +137,15 @@ export function App() {
     });
 
     const mergeMembers = (remote: UserProfile[]) => {
+      // Conta real logada: o mock local (usr_me) não entra nunca
+      const self = selfRef.current;
+      const isReal = self.authed && self.id && self.id !== initialCurrentUser.id;
       setAllMembers((prev) => {
         const byId = new Map<string, UserProfile>();
         [...sampleUsers, ...prev, ...remote].forEach((m) => {
-          if (m?.id) byId.set(String(m.id), m);
+          if (!m?.id) return;
+          if (isReal && String(m.id) === initialCurrentUser.id) return;
+          byId.set(String(m.id), m);
         });
         return Array.from(byId.values());
       });

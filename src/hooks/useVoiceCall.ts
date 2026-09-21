@@ -3,6 +3,7 @@ import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import type { UserProfile } from '../types';
 import { getSupabase } from '../lib/supabase';
 import { RTC_CONFIG, type LocalMediaFlags, type SignalPayload, type VoicePeerInfo } from '../lib/voice';
+import { isMobileDevice } from '../lib/voice';
 
 export interface RemoteAudio {
   user_id: string;
@@ -64,6 +65,42 @@ export function useVoiceCall(
   const screenTracksRef = useRef<MediaStreamTrack[]>([]);
   const onMediaChangeRef = useRef(onMediaChange);
   onMediaChangeRef.current = onMediaChange;
+
+  // --- Qualidade: limita bitrate/fps por tipo (trava menos, adapta à rede) ---
+  const tuneSender = useCallback(async (pc: RTCPeerConnection, track: MediaStreamTrack, kind: 'audio' | 'camera' | 'screen') => {
+    try {
+      const sender = pc.getSenders().find((s) => s.track === track);
+      if (!sender) return;
+      const mobile = isMobileDevice();
+      const params = sender.getParameters() as RTCRtpSendParameters & {
+        degradationPreference?: 'maintain-framerate' | 'maintain-resolution' | 'balanced';
+      };
+      if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
+      const enc = params.encodings[0];
+      if (kind === 'audio') {
+        enc.maxBitrate = 64000;
+      } else if (kind === 'camera') {
+        enc.maxBitrate = mobile ? 700_000 : 1_200_000;
+        enc.maxFramerate = mobile ? 24 : 30;
+        params.degradationPreference = 'maintain-framerate';
+      } else {
+        enc.maxBitrate = 5_000_000;
+        enc.maxFramerate = 30;
+        params.degradationPreference = 'maintain-resolution';
+      }
+      await sender.setParameters(params);
+    } catch {
+      /* navegador sem suporte: segue com padrão */
+    }
+  }, []);
+
+  const setTrackHint = (track: MediaStreamTrack | null, hint: string) => {
+    try {
+      if (track) (track as MediaStreamTrack & { contentHint?: string }).contentHint = hint;
+    } catch {
+      /* sem suporte */
+    }
+  };
 
   const userId = localUser.id;
 
@@ -208,6 +245,7 @@ export function useVoiceCall(
       if (!pc.getSenders().some((s) => s.track === track) && sendLiveRef.current) {
         try {
           pc.addTrack(track, sendLiveRef.current);
+          void tuneSender(pc, track, 'audio');
         } catch {
           /* duplicada */
         }
@@ -217,6 +255,7 @@ export function useVoiceCall(
       if (!pc.getSenders().some((s) => s.track === camTrackRef.current)) {
         try {
           pc.addTrack(camTrackRef.current, sendLiveRef.current);
+          void tuneSender(pc, camTrackRef.current, 'camera');
         } catch {
           /* duplicada */
         }
@@ -227,13 +266,14 @@ export function useVoiceCall(
         if (!pc.getSenders().some((s) => s.track === track)) {
           try {
             pc.addTrack(track, sendScreenRef.current!);
+            void tuneSender(pc, track, track.kind === 'video' ? 'screen' : 'audio');
           } catch {
             /* duplicada */
           }
         }
       });
     }
-  }, []);
+  }, [tuneSender]);
 
   const bindPeer = useCallback(
     (id: string, pc: RTCPeerConnection) => {
@@ -407,9 +447,24 @@ export function useVoiceCall(
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('Navegador sem suporte a câmera (use HTTPS/localhost)');
       }
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const mobile = isMobileDevice();
+      let stream: MediaStream;
+      try {
+        // 720p fluído (câmera frontal no celular)
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: mobile ? 960 : 1280 },
+            height: { ideal: mobile ? 540 : 720 },
+            frameRate: { ideal: mobile ? 24 : 30 },
+            facingMode: 'user',
+          },
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      }
       const track = stream.getVideoTracks()[0];
       if (!track) throw new Error('Nenhuma trilha de vídeo retornada');
+      setTrackHint(track, 'motion');
       ensureSendStreams();
       camTrackRef.current = track;
       setLocalCam(new MediaStream([track]));
@@ -446,10 +501,18 @@ export function useVoiceCall(
       if (!navigator.mediaDevices?.getDisplayMedia) {
         throw new Error('Navegador sem suporte a compartilhamento (use Chrome/Edge HTTPS)');
       }
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          width: { max: 1920 },
+          height: { max: 1080 },
+          frameRate: { max: 30 },
+        },
+        audio: true,
+      });
       if (!stream.getVideoTracks().length) {
         throw new Error('Nenhuma trilha de vídeo retornada');
       }
+      stream.getVideoTracks().forEach((t) => setTrackHint(t, 'detail'));
       ensureSendStreams();
       screenTracksRef.current = stream.getTracks();
       setLocalScreen(stream);

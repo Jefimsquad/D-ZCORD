@@ -27,6 +27,20 @@ export const NO_MEDIA: LocalMediaFlags = {
   screenStreamId: '',
 };
 
+// Celular = captura e bitrates menores para não travar
+export function isMobileDevice(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) return true;
+  try {
+    return (
+      !!window.matchMedia?.('(pointer: coarse)').matches &&
+      Math.min(window.screen.width, window.screen.height) < 768
+    );
+  } catch {
+    return false;
+  }
+}
+
 export const RTC_CONFIG: RTCConfiguration = {
   iceServers: [
     { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
