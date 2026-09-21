@@ -50,6 +50,7 @@ export function useVoiceCall(
   const [remotes, setRemotes] = useState<RemoteAudio[]>([]);
   const [remoteVideos, setRemoteVideos] = useState<RemoteVideo[]>([]);
   const [speakingIds, setSpeakingIds] = useState<string[]>([]);
+  const [signalReady, setSignalReady] = useState(false);
 
   const peersRef = useRef(new Map<string, RTCPeerConnection>());
   const makingOfferRef = useRef(new Map<string, boolean>());
@@ -176,7 +177,7 @@ export function useVoiceCall(
   );
 
   const negotiate = useCallback(
-    async (id: string) => {
+    async (id: string, attempt = 0) => {
       const pc = peersRef.current.get(id);
       if (!pc || makingOfferRef.current.get(id)) return;
       makingOfferRef.current.set(id, true);
@@ -187,7 +188,13 @@ export function useVoiceCall(
           await sendSignal(id, { kind: 'offer', sdp: ld.sdp, sdpType: ld.type });
         }
       } catch {
-        /* colisão: o lado polite resolve ao receber a oferta */
+        // Falha transitória (ex: oferta remota chegou junto): 1 retry se estável
+        if (attempt < 2) {
+          setTimeout(() => {
+            const cur = peersRef.current.get(id);
+            if (cur && cur.signalingState === 'stable') negotiate(id, attempt + 1);
+          }, 1500);
+        }
       } finally {
         makingOfferRef.current.set(id, false);
       }
@@ -335,17 +342,22 @@ export function useVoiceCall(
     signalChRef.current = ch;
     ch.on('broadcast', { event: 'signal' }, ({ payload }) => {
       onSignal(payload as SignalPayload);
-    }).subscribe();
+    }).subscribe((status) => {
+      // Só negocia depois do canal pronto: oferta antes disso é descartada
+      if (status === 'SUBSCRIBED') setSignalReady(true);
+    });
 
     return () => {
+      setSignalReady(false);
       supabase.removeChannel(ch);
       signalChRef.current = null;
     };
   }, [enabled, userId, channelId, createPeer, sendSignal, closePeer]);
 
   // --- Descoberta: cria PC com quem está na call / limpa quem saiu ---
+  // (só após sinalização pronta; oferta antes disso seria descartada)
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !signalReady) return;
     participants.forEach((p) => {
       if (p.user_id !== userId && !peersRef.current.has(p.user_id)) {
         createPeer(p.user_id);
@@ -356,7 +368,13 @@ export function useVoiceCall(
     peersRef.current.forEach((_pc, id) => {
       if (!ids.has(id)) closePeer(id);
     });
-  }, [participants, enabled, userId, createPeer, negotiate, closePeer, micStream]);
+  }, [participants, enabled, signalReady, userId, createPeer, negotiate, closePeer]);
+
+  // --- Microfone chegou depois dos peers: anexa e renegocia ---
+  useEffect(() => {
+    if (!enabled || !micStream) return;
+    peersRef.current.forEach((pc) => attachAllTracks(pc));
+  }, [micStream, enabled, attachAllTracks]);
 
   // Fecha tudo ao desmontar/trocar de canal
   useEffect(() => {

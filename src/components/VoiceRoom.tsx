@@ -140,6 +140,10 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   onToggleScreen,
 }) => {
   const remotePeers = participants.filter((p) => p.user_id !== currentUser.id);
+  const canShareScreen =
+    typeof navigator !== 'undefined' &&
+    !!navigator.mediaDevices &&
+    'getDisplayMedia' in navigator.mediaDevices;
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isScreenFullscreen, setIsScreenFullscreen] = useState(false);
@@ -485,12 +489,19 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
         {/* Share Screen (transmite para a call) */}
         <button
           onClick={onToggleScreen}
-          className={`p-3.5 rounded-full transition ${
+          disabled={!screenOn && !canShareScreen}
+          className={`p-3.5 rounded-full transition disabled:opacity-40 ${
             screenOn
               ? 'bg-[#5865f2] text-white hover:bg-[#4752c4]'
               : 'bg-[#313338] text-white hover:bg-[#35373c]'
           }`}
-          title={screenOn ? 'Parar Compartilhamento' : 'Compartilhar Tela'}
+          title={
+            screenOn
+              ? 'Parar Compartilhamento'
+              : canShareScreen
+                ? 'Compartilhar Tela'
+                : 'Compartilhamento indisponível neste navegador'
+          }
         >
           <ScreenShare size={22} />
         </button>
