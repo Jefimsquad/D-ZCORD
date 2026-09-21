@@ -130,17 +130,22 @@ export async function signUpWithPassword(
   // Sem sessão (confirmação de e-mail ativa): já deixa o perfil com nickname/foto escolhidos
   if (data.user?.id) {
     const base = email.trim().split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '_') || 'usuario';
-    await supabase.from('profiles').upsert(
-      {
-        id: data.user.id,
-        username: base,
-        display_name: displayName || base,
-        avatar_url: avatarUrl || '',
-        status: 'online',
-        email: email.trim(),
-      },
-      { onConflict: 'id' }
-    );
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const uname = attempt === 0 ? base : `${base}_${Math.random().toString(36).slice(2, 6)}`;
+      const { error: upsertError } = await supabase.from('profiles').upsert(
+        {
+          id: data.user.id,
+          username: uname,
+          display_name: displayName || uname,
+          avatar_url: avatarUrl || '',
+          status: 'online',
+          email: email.trim(),
+        },
+        { onConflict: 'id' }
+      );
+      if (!upsertError) break;
+      if (!upsertError.message.includes('duplicate') && (upsertError as any).code !== '23505') break;
+    }
   }
   return { success: true, needsConfirm: true, message: 'Conta criada! Confirme no e-mail e depois entre.' };
 }

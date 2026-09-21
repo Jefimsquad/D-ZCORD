@@ -172,14 +172,19 @@ export function App() {
   useEffect(() => {
     setAllMembers((prev) => {
       if (!currentUser?.id) return prev;
-      const idx = prev.findIndex((m) => m.id === currentUser.id);
-      if (idx === -1) return [...prev, currentUser];
-      if (JSON.stringify(prev[idx]) === JSON.stringify(currentUser)) return prev;
-      const next = [...prev];
+      // Logado com conta real: remove o mock local (usr_me) para não duplicar
+      const base =
+        authed && currentUser.id !== initialCurrentUser.id
+          ? prev.filter((m) => m.id !== initialCurrentUser.id)
+          : prev;
+      const idx = base.findIndex((m) => m.id === currentUser.id);
+      if (idx === -1) return [...base, currentUser];
+      if (JSON.stringify(base[idx]) === JSON.stringify(currentUser)) return base;
+      const next = [...base];
       next[idx] = currentUser;
       return next;
     });
-  }, [currentUser]);
+  }, [currentUser, authed]);
 
   // Persist local state
   useEffect(() => {
