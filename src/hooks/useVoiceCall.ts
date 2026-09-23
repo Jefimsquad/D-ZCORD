@@ -87,6 +87,8 @@ export function useVoiceCall(
   // Streams de vídeo já vistos por peer (streamId -> user_id): o áudio que
   // chega no MESMO stream do vídeo é o áudio do sistema da tela, não o mic.
   const videoStreamIdsRef = useRef(new Map<string, string>());
+  // Fechamentos adiados (graça de 5s p/ sync parcial da presença)
+  const pendingCloseRef = useRef(new Map<string, number>());
 
   // --- Qualidade: limita bitrate/fps por tipo (trava menos, adapta à rede) ---
   const tuneSender = useCallback(async (pc: RTCPeerConnection, track: MediaStreamTrack, kind: 'audio' | 'camera' | 'screen') => {    try {
@@ -110,10 +112,13 @@ export function useVoiceCall(
         enc.maxFramerate = 30;
         params.degradationPreference = 'maintain-resolution';
       } else if (kind === 'screen') {
-        // Tela segue a escada automática (screenLevelRef); cai sozinha se travar
+        // Tela segue a escada automática (screenLevelRef); cai sozinha se travar.
+        // Sem maxFramerate aqui de propósito: a captura já limita a 30fps e o
+        // Chromium tem bugs conhecidos aplicando maxFramerate em display-capture
+        // (vídeo congela/preto no PC). Bitrate + escala resolvem sem esse risco.
         const lvl = SCREEN_LADDER[screenLevelRef.current] || SCREEN_LADDER[0];
         enc.maxBitrate = lvl.bitrate;
-        enc.maxFramerate = lvl.fps;
+        delete (enc as { maxFramerate?: number }).maxFramerate;
         if (lvl.downBy !== 1) enc.scaleResolutionDownBy = lvl.downBy;
         else delete (enc as { scaleResolutionDownBy?: number }).scaleResolutionDownBy;
         params.degradationPreference = 'maintain-resolution';
@@ -132,21 +137,30 @@ export function useVoiceCall(
     }
   };
 
-  // No celular prefere H264 na tela (aceleração por hardware = menos trava)
-  const preferH264 = (pc: RTCPeerConnection, track: MediaStreamTrack) => {
+  // Ordem de codec preferida por aparelho (não mexe no comportamento do celular):
+  // celular = H264 na tela (hardware = menos trava, já funcionava);
+  // PC = VP8 na tela (decodificação universal; evita buraco negro de
+  // decode com VP9/AV1 por aceleração de hardware no Windows = tela preta).
+  const preferCodec = (pc: RTCPeerConnection, track: MediaStreamTrack, mime: string) => {
     try {
-      if (!isMobileDevice()) return;
       const sender = pc.getSenders().find((s) => s.track === track);
       const transceiver = pc.getTransceivers().find((t) => t.sender === sender);
       const caps = RTCRtpSender.getCapabilities('video');
-      const h264 = (caps?.codecs || []).filter((c) => c.mimeType.toLowerCase() === 'video/h264');
-      if (transceiver?.setCodecPreferences && h264.length) {
-        const rest = (caps?.codecs || []).filter((c) => !h264.includes(c));
-        transceiver.setCodecPreferences([...h264, ...rest]);
+      const preferred = (caps?.codecs || []).filter(
+        (c) => c.mimeType.toLowerCase() === mime.toLowerCase()
+      );
+      if (transceiver?.setCodecPreferences && preferred.length) {
+        const rest = (caps?.codecs || []).filter((c) => !preferred.includes(c));
+        transceiver.setCodecPreferences([...preferred, ...rest]);
       }
     } catch {
       /* sem suporte */
     }
+  };
+
+  const preferScreenCodec = (pc: RTCPeerConnection, track: MediaStreamTrack) => {
+    if (isMobileDevice()) preferCodec(pc, track, 'video/h264');
+    else preferCodec(pc, track, 'video/vp8');
   };
 
   const userId = localUser.id;
@@ -237,7 +251,7 @@ export function useVoiceCall(
             if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
             const enc = params.encodings[0];
             enc.maxBitrate = lvl.bitrate;
-            enc.maxFramerate = lvl.fps;
+            delete (enc as { maxFramerate?: number }).maxFramerate;
             if (lvl.downBy !== 1) enc.scaleResolutionDownBy = lvl.downBy;
             else delete (enc as { scaleResolutionDownBy?: number }).scaleResolutionDownBy;
             params.degradationPreference = 'maintain-resolution';
@@ -391,7 +405,7 @@ export function useVoiceCall(
         if (!pc.getSenders().some((s) => s.track === track)) {
           try {
             pc.addTrack(track, sendScreenRef.current!);
-            if (track.kind === 'video') preferH264(pc, track);
+            if (track.kind === 'video') preferScreenCodec(pc, track);
             void tuneSender(pc, track, track.kind === 'video' ? 'screen' : 'audio');
           } catch {
             /* duplicada */
@@ -546,6 +560,8 @@ export function useVoiceCall(
 
   // --- Descoberta: cria PC com quem está na call / limpa quem saiu ---
   // (só após sinalização pronta; oferta antes disso seria descartada)
+  // Quem some da presença por alguns segundos (sync parcial do Realtime) NÃO
+  // tem a conexão destruída na hora: espera 5s e só fecha se continuar fora.
   useEffect(() => {
     if (!enabled || !signalReady) return;
     participants.forEach((p) => {
@@ -553,10 +569,22 @@ export function useVoiceCall(
         createPeer(p.user_id);
         negotiate(p.user_id);
       }
+      const t = pendingCloseRef.current.get(p.user_id);
+      if (t !== undefined) {
+        window.clearTimeout(t);
+        pendingCloseRef.current.delete(p.user_id);
+      }
     });
     const ids = new Set(participants.map((p) => p.user_id));
     peersRef.current.forEach((_pc, id) => {
-      if (!ids.has(id)) closePeer(id);
+      if (!ids.has(id) && !pendingCloseRef.current.has(id)) {
+        const timer = window.setTimeout(() => {
+          pendingCloseRef.current.delete(id);
+          const stillGone = !participantsRef.current.some((p) => p.user_id === id);
+          if (stillGone) closePeer(id);
+        }, 5000);
+        pendingCloseRef.current.set(id, timer);
+      }
     });
   }, [participants, enabled, signalReady, userId, createPeer, negotiate, closePeer]);
 
@@ -569,6 +597,8 @@ export function useVoiceCall(
   // Fecha tudo ao desmontar/trocar de canal
   useEffect(() => {
     return () => {
+      pendingCloseRef.current.forEach((t) => window.clearTimeout(t));
+      pendingCloseRef.current.clear();
       peersRef.current.forEach((pc) => pc.close());
       peersRef.current.clear();
       makingOfferRef.current.clear();
@@ -714,8 +744,10 @@ export function useVoiceCall(
       screenTracksRef.current = stream.getTracks();
       setLocalScreen(stream);
       setScreenOn(true);
-      // Celular começa um degrau abaixo para não congelar de cara
-      const startLevel = isMobileDevice() ? 1 : 0;
+      // Começa em 720p (nível 1) e SOBE para 1080p se a rede aguentar:
+      // imagem aparece na hora em vez de travar/preta nos primeiros segundos
+      // tentando 5 Mbps de cara. O controlador sobe sozinho em ~15s estáveis.
+      const startLevel = 1;
       screenLevelRef.current = startLevel;
       setScreenLevel(startLevel);
       stream.getVideoTracks()[0].onended = () => {

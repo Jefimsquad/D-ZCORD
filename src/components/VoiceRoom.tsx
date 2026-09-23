@@ -58,27 +58,45 @@ export const RemoteVideoEl = ({
   stream,
   audio,
   className,
+  onPlaying,
 }: {
   stream: MediaStream;
   audio?: boolean;
   className?: string;
+  onPlaying?: () => void;
 }) => {
   const ref = useRef<HTMLVideoElement | null>(null);
+  const onPlayingRef = useRef(onPlaying);
+  onPlayingRef.current = onPlaying;
   useEffect(() => {
     const el = ref.current;
-    if (el) {
-      // React define o atributo `muted`, mas a política de autoplay do
-      // Chrome lê a PROPRIEDADE. Sem isso, tela de PC (com áudio do
-      // sistema) tenta autoplay com som, é bloqueada e fica preta.
-      el.muted = !audio;
-      el.srcObject = stream;
-      el.play().catch(() => {
-        // Autoplay com áudio bloqueado: garante ao menos o vídeo
-        el.muted = true;
-        el.play().catch(() => {});
-      });
-    }
+    if (!el) return;
+    let watchdog = 0;
+    const notify = () => onPlayingRef.current?.();
+    el.addEventListener('playing', notify);
+    // React define o atributo `muted`, mas a política de autoplay do
+    // Chrome lê a PROPRIEDADE. Sem isso, tela de PC (com áudio do
+    // sistema) tenta autoplay com som, é bloqueada e fica preta.
+    el.muted = !audio;
+    el.srcObject = stream;
+    el.play().catch(() => {
+      // Autoplay com áudio bloqueado: garante ao menos o vídeo
+      el.muted = true;
+      el.play().catch(() => {});
+    });
+    // Elemento travado (srcObject antigo, renegociação): se não saiu do
+    // lugar em 4s, re-anexa e tenta de novo em vez de ficar preto.
+    watchdog = window.setTimeout(() => {
+      const cur = ref.current;
+      if (cur && cur.srcObject === stream && cur.readyState < 2 && cur.paused) {
+        cur.srcObject = null;
+        cur.srcObject = stream;
+        cur.play().catch(() => {});
+      }
+    }, 4000);
     return () => {
+      window.clearTimeout(watchdog);
+      el.removeEventListener('playing', notify);
       if (el) el.srcObject = null;
     };
   }, [stream, audio]);
@@ -88,17 +106,30 @@ export const RemoteVideoEl = ({
 const RemoteScreenTile = ({ peerName, stream }: { peerName: string; stream: MediaStream }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [fs, setFs] = useState(false);
-  // Se o navegador pausar a trilha (janela minimizada/protegida), o <video>
-  // fica preto. Mostra aviso em vez de preto puro.
+  // Trilha remota nasce `muted=true` até o primeiro frame chegar (normal
+  // durante o handshake de alguns segundos). Só é "pausado" de verdade se
+  // JÁ estava tocando e parou — nunca acusa no período de conexão.
+  const [hadFrames, setHadFrames] = useState(false);
   const [stalled, setStalled] = useState(false);
+  useEffect(() => {
+    setHadFrames(false);
+    setStalled(false);
+  }, [stream]);
   useEffect(() => {
     const tracks = stream.getVideoTracks();
     const update = () =>
-      setStalled(tracks.length > 0 && tracks.some((t) => t.muted || t.readyState !== 'live'));
+      setStalled(
+        hadFrames && tracks.length > 0 && tracks.some((t) => t.muted || t.readyState !== 'live')
+      );
     update();
     tracks.forEach((t) => {
+      const prevUnmute = t.onunmute;
+      t.onunmute = (e) => {
+        if (typeof prevUnmute === 'function') prevUnmute.call(t, e);
+        setHadFrames(true);
+        update();
+      };
       t.onmute = update;
-      t.onunmute = update;
       t.onended = update;
     });
     stream.onaddtrack = update;
@@ -107,11 +138,12 @@ const RemoteScreenTile = ({ peerName, stream }: { peerName: string; stream: Medi
       tracks.forEach((t) => {
         t.onmute = null;
         t.onunmute = null;
+        t.onended = null;
       });
       stream.onaddtrack = null;
       stream.onremovetrack = null;
     };
-  }, [stream]);
+  }, [stream, hadFrames]);
   useEffect(() => {
     const onFs = () => setFs(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', onFs);
@@ -144,13 +176,21 @@ const RemoteScreenTile = ({ peerName, stream }: { peerName: string; stream: Medi
       {/* Vídeo sempre mutado aqui: o áudio da tela toca no <audio> global
           (App), que continua fora da sala. Vídeo mutado = autoplay liberado
           no Chrome mesmo quando o PC compartilha com áudio do sistema. */}
-      <RemoteVideoEl stream={stream} className="w-full h-full object-contain rounded pointer-events-none" />
+      <RemoteVideoEl
+        stream={stream}
+        onPlaying={() => setHadFrames(true)}
+        className="w-full h-full object-contain rounded pointer-events-none"
+      />
+      {/* Badges pequenos e sem bloquear o vídeo: "conectando" só antes do
+          primeiro frame; "pausado" só se já estava tocando e parou. */}
+      {!hadFrames && !stalled && (
+        <div className="absolute top-3 left-3 bg-[#111214]/80 backdrop-blur px-3 py-1 rounded text-xs text-[#b5bac1] pointer-events-none">
+          Conectando vídeo…
+        </div>
+      )}
       {stalled && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-center px-4">
-          <p className="text-sm text-[#f0b232]">
-            Sinal da tela pausado (janela minimizada ou conteúdo protegido).
-            Peça para {peerName} re-compartilhar a tela.
-          </p>
+        <div className="absolute top-3 left-3 bg-[#111214]/80 backdrop-blur px-3 py-1 rounded text-xs text-[#f0b232] pointer-events-none">
+          Sinal pausado — peça para {peerName} re-compartilhar
         </div>
       )}
       <div className="absolute bottom-3 left-3 bg-[#111214]/80 backdrop-blur px-3 py-1 rounded text-xs text-white pointer-events-none">
@@ -455,20 +495,30 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
             const remote = callRemotes.find((r) => r.user_id === peer.user_id);
             const speaking = callSpeakingIds.includes(peer.user_id);
             const userVideos = callRemoteVideos.filter((v) => v.user_id === peer.user_id);
-            const camVideo = callRemoteVideos.find(
+            const exactCam = callRemoteVideos.find(
               (v) => v.user_id === peer.user_id && peer.camStreamId && v.streamId === peer.camStreamId
             );
-            // Match exato pelo streamId da presença; se a presença ainda não
-            // atualizou (chega depois do WebRTC), cai para o vídeo do peer
-            // que NÃO é a câmera — evita tile preso em stream vazio/preto.
-            const screenVideo =
-              callRemoteVideos.find(
-                (v) =>
-                  v.user_id === peer.user_id && peer.screenStreamId && v.streamId === peer.screenStreamId
-              ) ||
-              (peer.screensharing
-                ? userVideos.find((v) => v !== camVideo && v.streamId !== peer.camStreamId)
-                : undefined);
+            const exactScreen = callRemoteVideos.find(
+              (v) =>
+                v.user_id === peer.user_id && peer.screenStreamId && v.streamId === peer.screenStreamId
+            );
+            // A presença (flag/streamId) pode chegar DEPOIS do vídeo via WebRTC.
+            // Fallbacks para nunca esconder um vídeo que já chegou:
+            const pool = userVideos.filter((v) => v !== exactCam && v !== exactScreen);
+            let camVideo = exactCam;
+            let screenVideo = exactScreen;
+            // 1) flag de tela com ID defasado: qualquer vídeo que não seja a câmera
+            if (!screenVideo && peer.screensharing) {
+              screenVideo = pool.find((v) => v !== camVideo);
+            }
+            // 2) presença totalmente defasada mas chegou vídeo: mostra em vez de esconder
+            if (!screenVideo && !camVideo && pool.length > 0 && !peer.video) {
+              screenVideo = pool[0];
+            }
+            // 3) câmera com ID defasado: usa o que sobrou
+            if (!camVideo && peer.video) {
+              camVideo = pool.find((v) => v !== screenVideo);
+            }
             const showCam = !!peer.video || !!camVideo;
             const showScreen = !!peer.screensharing || !!screenVideo;
             return (

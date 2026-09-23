@@ -41,11 +41,27 @@ export function isMobileDevice(): boolean {
   }
 }
 
-export const RTC_CONFIG: RTCConfiguration = {
-  iceServers: [
+export const RTC_CONFIG: RTCConfiguration = (() => {
+  const iceServers: RTCIceServer[] = [
     { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-  ],
-};
+  ];
+  // TURN opcional (atravessa NATs simétricos onde só STUN não conecta).
+  // Sem isso, em algumas redes PC↔PC o vídeo/áudio nem estabelece.
+  try {
+    const urls = (import.meta as unknown as { env?: Record<string, string> })?.env
+      ?.VITE_TURN_URLS;
+    const username = (import.meta as unknown as { env?: Record<string, string> })?.env
+      ?.VITE_TURN_USERNAME;
+    const credential = (import.meta as unknown as { env?: Record<string, string> })?.env
+      ?.VITE_TURN_CREDENTIAL;
+    if (urls && username && credential) {
+      iceServers.push({ urls: urls.split(',').map((u) => u.trim()), username, credential });
+    }
+  } catch {
+    /* env indisponível: segue só com STUN */
+  }
+  return { iceServers };
+})();
 
 export interface SignalPayload {
   to: string;

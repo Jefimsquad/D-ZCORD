@@ -35,10 +35,12 @@ export function useVoicePresence(
 
   useEffect(() => {
     const supabase: SupabaseClient | null = getSupabase();
-    if (!supabase || !enabled || !key || !userId) {
+    if (!supabase || !enabled || !userId) {
       setPresence({});
       return;
     }
+    // Sem canais: mantém a última lista em vez de piscar tudo para vazio
+    if (!key) return;
     let cancelled = false;
     const chans = new Map<string, RealtimeChannel>();
 
@@ -65,7 +67,15 @@ export function useVoicePresence(
         });
         next[cid] = list;
       });
-      setPresence(next);
+      // Mescla em vez de substituir: nunca apaga canais que ainda existem por
+      // causa de um sync parcial; remove só os que não estão mais inscritos.
+      setPresence((prev) => {
+        const merged: Record<string, VoicePeerInfo[]> = { ...prev, ...next };
+        Object.keys(merged).forEach((k) => {
+          if (!chans.has(k)) delete merged[k];
+        });
+        return merged;
+      });
     };
 
     effectiveIds.forEach((cid) => {
@@ -107,8 +117,31 @@ export function useVoicePresence(
     });
     channelsRef.current = chans;
 
+    // Rede de segurança: o Realtime às vezes perde eventos de join/sync.
+    // Releitura periódica + republicação (heartbeat) convergem sozinhas em
+    // segundos: gente na call volta a aparecer e flag de tela atualiza.
+    const safetyId = setInterval(() => {
+      if (cancelled) return;
+      rebuild();
+      const joined = joinedRef.current;
+      const ch = (joined && chans.get(joined)) || null;
+      if (ch && userId) {
+        ch.track({
+          user_id: userId,
+          display_name: profileRef.current.display_name,
+          avatar_url: profileRef.current.avatar_url,
+          muted: isMutedRef.current,
+          video: !!mediaRef.current?.video,
+          screensharing: !!mediaRef.current?.screensharing,
+          camStreamId: mediaRef.current?.camStreamId || '',
+          screenStreamId: mediaRef.current?.screenStreamId || '',
+        }).catch(() => {});
+      }
+    }, 10000);
+
     return () => {
       cancelled = true;
+      clearInterval(safetyId);
       chans.forEach((ch) => {
         supabase.removeChannel(ch);
       });
