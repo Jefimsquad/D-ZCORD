@@ -59,10 +59,17 @@ export const RTC_CONFIG: RTCConfiguration = (() => {
     } else {
       // Fallback público gratuito: quando os dois PCs estão atrás de NAT
       // restrito, só STUN não atravessa e a call fica muda/preta eternamente.
-      // O TURN relaya a mídia nesse caso. Se estiver fora do ar, o ICE
-      // simplesmente ignora e tenta direto como antes (sem quebrar nada).
+      // Inclui variantes TCP/TLS na 443: se a rede bloqueia UDP por completo,
+      // o relay por TCP/TLS ainda passa (firewall de escola/empresa/4G).
+      // URL inalcançável é só ignorada pelo ICE (sem quebrar nada).
       iceServers.push({
-        urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443'],
+        urls: [
+          'turn:openrelay.metered.ca:80',
+          'turn:openrelay.metered.ca:443',
+          'turn:openrelay.metered.ca:80?transport=tcp',
+          'turn:openrelay.metered.ca:443?transport=tcp',
+          'turns:openrelay.metered.ca:443?transport=tcp',
+        ],
         username: 'openrelayproject',
         credential: 'openrelayproject',
       });
