@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import type { UserProfile } from '../types';
 import { getSupabase } from '../lib/supabase';
-import { RTC_CONFIG, type LocalMediaFlags, type SignalPayload, type VoicePeerInfo } from '../lib/voice';
+import { RTC_CONFIG, getExtraIceServers, ensureTurnServers, type LocalMediaFlags, type SignalPayload, type VoicePeerInfo } from '../lib/voice';
 import { isMobileDevice } from '../lib/voice';
 
 export interface RemoteAudio {
@@ -558,7 +558,10 @@ export function useVoiceCall(
   const createPeer = useCallback(
     (id: string) => {
       if (peersRef.current.has(id)) return peersRef.current.get(id)!;
-      const pc = new RTCPeerConnection(RTC_CONFIG);
+      // STUN fixo + TURN buscado (Metered) se já carregado nesta sessão
+      const pc = new RTCPeerConnection({
+        iceServers: [...(RTC_CONFIG.iceServers || []), ...getExtraIceServers()],
+      });
       peersRef.current.set(id, pc);
       bindPeer(id, pc);
       attachAllTracks(pc);
@@ -566,6 +569,13 @@ export function useVoiceCall(
     },
     [attachAllTracks, bindPeer]
   );
+
+  // Ao entrar na call, busca credenciais TURN (uma vez por sessão).
+  // Peers criados depois disso já incluem o relay.
+  useEffect(() => {
+    if (!enabled || !userId) return;
+    void ensureTurnServers();
+  }, [enabled, userId, channelId]);
 
   // --- Sinalização ---
   useEffect(() => {

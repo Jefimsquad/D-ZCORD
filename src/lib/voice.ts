@@ -45,40 +45,68 @@ export const RTC_CONFIG: RTCConfiguration = (() => {
   const iceServers: RTCIceServer[] = [
     { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
   ];
-  // TURN opcional (atravessa NATs simétricos onde só STUN não conecta).
-  // Sem isso, em algumas redes PC↔PC o vídeo/áudio nem estabelece.
+  // TURN próprio via env (atravessa NATs simétricos/CGNAT onde só STUN falha).
+  // Formato: VITE_TURN_URLS="turn:host:3478" + USERNAME + CREDENTIAL.
   try {
-    const urls = (import.meta as unknown as { env?: Record<string, string> })?.env
-      ?.VITE_TURN_URLS;
-    const username = (import.meta as unknown as { env?: Record<string, string> })?.env
-      ?.VITE_TURN_USERNAME;
-    const credential = (import.meta as unknown as { env?: Record<string, string> })?.env
-      ?.VITE_TURN_CREDENTIAL;
+    const env = (import.meta as unknown as { env?: Record<string, string> })?.env;
+    const urls = env?.VITE_TURN_URLS;
+    const username = env?.VITE_TURN_USERNAME;
+    const credential = env?.VITE_TURN_CREDENTIAL;
     if (urls && username && credential) {
-      iceServers.push({ urls: urls.split(',').map((u) => u.trim()), username, credential });
-    } else {
-      // Fallback público gratuito: quando os dois PCs estão atrás de NAT
-      // restrito, só STUN não atravessa e a call fica muda/preta eternamente.
-      // Inclui variantes TCP/TLS na 443: se a rede bloqueia UDP por completo,
-      // o relay por TCP/TLS ainda passa (firewall de escola/empresa/4G).
-      // URL inalcançável é só ignorada pelo ICE (sem quebrar nada).
-      iceServers.push({
-        urls: [
-          'turn:openrelay.metered.ca:80',
-          'turn:openrelay.metered.ca:443',
-          'turn:openrelay.metered.ca:80?transport=tcp',
-          'turn:openrelay.metered.ca:443?transport=tcp',
-          'turns:openrelay.metered.ca:443?transport=tcp',
-        ],
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
-      });
+      iceServers.push({ urls: urls.split(',').map((u) => u.trim()).filter(Boolean), username, credential });
     }
+    // (Sem fallback público hardcoded: o OpenRelay removeu as credenciais
+    // estáticas — user/senha fixos só geram 401 e atrasam o ICE à toa.)
   } catch {
     /* env indisponível: segue só com STUN */
   }
   return { iceServers };
 })();
+
+// TURN gratuito via Metered OpenRelay (20 GB/mês): exige conta gratuita.
+// Vercel → Environment Variables: VITE_METERED_APP + VITE_METERED_KEY.
+// Busca uma vez por sessão; sem elas, a call tenta P2P direto (STUN).
+let meteredServers: RTCIceServer[] | null = null;
+let meteredFetching: Promise<RTCIceServer[]> | null = null;
+
+export function getExtraIceServers(): RTCIceServer[] {
+  return meteredServers || [];
+}
+
+export function ensureTurnServers(): Promise<RTCIceServer[]> {
+  if (meteredServers) return Promise.resolve(meteredServers);
+  if (meteredFetching) return meteredFetching;
+  meteredFetching = (async () => {
+    try {
+      const env = (import.meta as unknown as { env?: Record<string, string> })?.env;
+      const app = (env?.VITE_METERED_APP || '').trim();
+      const key = (env?.VITE_METERED_KEY || '').trim();
+      if (!app || !key) return [];
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000);
+      const res = await fetch(
+        `https://${app}.metered.live/api/v1/turn/credentials?apiKey=${encodeURIComponent(key)}`,
+        { signal: ctrl.signal }
+      );
+      clearTimeout(timer);
+      if (!res.ok) return [];
+      const arr = (await res.json()) as Array<{ urls?: string | string[]; url?: string; username?: string; credential?: string }>;
+      meteredServers = (Array.isArray(arr) ? arr : [])
+        .map((s) => ({
+          urls: s.urls || s.url || [],
+          username: s.username,
+          credential: s.credential,
+        }))
+        .filter((s) => (Array.isArray(s.urls) ? s.urls.length : !!s.urls)) as RTCIceServer[];
+      return meteredServers;
+    } catch {
+      return [];
+    } finally {
+      meteredFetching = null;
+    }
+  })();
+  return meteredFetching;
+}
 
 export interface SignalPayload {
   to: string;

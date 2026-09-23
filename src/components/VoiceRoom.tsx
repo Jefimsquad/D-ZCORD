@@ -454,7 +454,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                     </span>
                     <span>rede (ICE): {d?.iceState ?? '—'}</span>
                     <span>
-                      sinal: of.env/rec {d?.offerSent ?? 0}/{d?.offerRecv ?? 0} • resp.env/rec {d?.answerSent ?? 0}/{d?.answerRecv ?? 0} • {d?.lastSignal ?? '—'}
+                      sinal: of.env/rec {d?.offerSent ?? 0}/{d?.offerRecv ?? 0} • resp.env/rec {d?.answerSent ?? 0}/{d?.answerRecv ?? 0} • rede.env/rec {d?.iceSent ?? 0}/{d?.iceRecv ?? 0} • {d?.lastSignal ?? '—'}
                     </span>
                     <span className="text-[#949ba4]">{hint}</span>
                   </div>
