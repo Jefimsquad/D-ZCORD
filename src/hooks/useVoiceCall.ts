@@ -65,6 +65,7 @@ interface UseVoiceCallResult {
   screenQuality: string;
   signalReady: boolean;
   peerDebug: Record<string, PeerDebugInfo>;
+  turnCount: number;
 }
 
 // Mesh WebRTC (áudio + câmera + tela) com padrão polite/impolite:
@@ -572,9 +573,18 @@ export function useVoiceCall(
 
   // Ao entrar na call, busca credenciais TURN (uma vez por sessão).
   // Peers criados depois disso já incluem o relay.
+  // turnCount alimenta o painel (prova se as vars entraram no build).
+  const [turnCount, setTurnCount] = useState(
+    () => (RTC_CONFIG.iceServers || []).filter((s) => {
+      const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
+      return urls.some((u) => String(u).startsWith('turn'));
+    }).length + getExtraIceServers().length
+  );
   useEffect(() => {
     if (!enabled || !userId) return;
-    void ensureTurnServers();
+    void ensureTurnServers().then((servers) => {
+      if (servers.length) setTurnCount((c) => c + servers.length);
+    });
   }, [enabled, userId, channelId]);
 
   // --- Sinalização ---
@@ -999,5 +1009,6 @@ export function useVoiceCall(
     screenQuality: (SCREEN_LADDER[screenLevel] || SCREEN_LADDER[0]).label,
     signalReady,
     peerDebug,
+    turnCount,
   };
 }

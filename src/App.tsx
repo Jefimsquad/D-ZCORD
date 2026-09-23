@@ -888,6 +888,7 @@ Recomendo dividir o fluxo em:
           screenQuality={voiceCall.screenQuality}
           peerDebug={voiceCall.peerDebug}
           signalReady={voiceCall.signalReady}
+          turnCount={voiceCall.turnCount}
           onDisconnect={() => {
             setActiveVoiceChannel(null);
             const firstText = activeServer?.channels.find((c) => c.type === 'text');

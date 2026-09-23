@@ -39,6 +39,7 @@ interface VoiceRoomProps {
   screenQuality?: string;
   peerDebug?: Record<string, PeerDebugInfo>;
   signalReady?: boolean;
+  turnCount?: number;
 }
 
 export const RemoteAudioEl = ({ stream }: { stream: MediaStream }) => {
@@ -236,6 +237,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   screenQuality = '',
   peerDebug = {},
   signalReady = false,
+  turnCount = 0,
 }) => {
   const remotePeers = participants.filter((p) => p.user_id !== currentUser.id);
   const canShareScreen =
@@ -426,7 +428,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
         {isSupabaseConnected && remotePeers.length > 0 && (
           <details className="max-w-5xl w-full bg-[#1e1f22] border border-[#35373c] text-xs px-4 py-2 rounded-lg">
             <summary className="cursor-pointer text-[#b5bac1] hover:text-white select-none">
-              🩺 Saúde da call {signalReady ? '(sinalização ok)' : '(sinalização conectando…)'}
+              🩺 Saúde da call {signalReady ? '(sinalização ok)' : '(sinalização conectando…)'} • relay TURN: {turnCount > 0 ? `${turnCount} ativo(s)` : 'ausente (confira as envs + redeploy)'}
             </summary>
             <div className="mt-2 flex flex-col gap-1.5">
               {remotePeers.map((peer) => {
