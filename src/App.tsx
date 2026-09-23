@@ -387,7 +387,7 @@ export function App() {
   const voicePresence = useVoicePresence(
     voiceChannelIds,
     currentUser,
-    isMuted,
+    isMuted || isDeafened,
     isSupabaseConnected,
     activeVoiceChannel?.id || null,
     voiceMedia
@@ -399,10 +399,11 @@ export function App() {
   }, [activeVoiceChannel]);
 
   // Call de voz viva em segundo plano (mesmo navegando nos canais)
+  // Ensurdecido = mic cortado junto (comportamento Discord)
   const voiceCall = useVoiceCall(
     activeVoiceChannel?.id || '',
     currentUser,
-    isMuted,
+    isMuted || isDeafened,
     isSupabaseConnected && !!activeVoiceChannel,
     (activeVoiceChannel ? voicePresence[activeVoiceChannel.id] : undefined) || [],
     (flags) => setVoiceMedia(flags)
@@ -955,12 +956,12 @@ Recomendo dividir o fluxo em:
 
       {/* Áudio global da call (continua fora da sala de voz) */}
       {voiceCall.remotes.map((r) => (
-        <RemoteAudioEl key={`${r.user_id}:${r.streamId}`} stream={r.stream} />
+        <RemoteAudioEl key={`${r.user_id}:${r.streamId}`} stream={r.stream} muted={isDeafened} />
       ))}
       {/* Áudio do sistema das telas compartilhadas (PC): toca aqui para o
           vídeo da tela poder ficar mutado e o autoplay nunca travar em preto */}
       {voiceCall.remoteScreenAudios.map((r) => (
-        <RemoteAudioEl key={`screen:${r.user_id}:${r.streamId}`} stream={r.stream} />
+        <RemoteAudioEl key={`screen:${r.user_id}:${r.streamId}`} stream={r.stream} muted={isDeafened} />
       ))}
 
       {/* MODALS */}

@@ -42,19 +42,20 @@ interface VoiceRoomProps {
   turnCount?: number;
 }
 
-export const RemoteAudioEl = ({ stream }: { stream: MediaStream }) => {
+export const RemoteAudioEl = ({ stream, muted }: { stream: MediaStream; muted?: boolean }) => {
   const ref = useRef<HTMLAudioElement | null>(null);
   useEffect(() => {
     const el = ref.current;
     if (el) {
+      el.muted = !!muted;
       el.srcObject = stream;
       el.play().catch(() => {});
     }
     return () => {
       if (el) el.srcObject = null;
     };
-  }, [stream]);
-  return <audio ref={ref} autoPlay playsInline />;
+  }, [stream, muted]);
+  return <audio ref={ref} autoPlay playsInline muted={muted} />;
 };
 
 export const RemoteVideoEl = ({

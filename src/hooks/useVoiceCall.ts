@@ -859,10 +859,9 @@ export function useVoiceCall(
       screenTracksRef.current = stream.getTracks();
       setLocalScreen(stream);
       setScreenOn(true);
-      // Começa em 720p (nível 1) e SOBE para 1080p se a rede aguentar:
-      // imagem aparece na hora em vez de travar/preta nos primeiros segundos
-      // tentando 5 Mbps de cara. O controlador sobe sozinho em ~15s estáveis.
-      const startLevel = 1;
+      // PC começa em 1080p (nível 0) e DESCE sozinho se a rede não
+      // aguentar; celular começa em 720p (nível 1) e sobe se der.
+      const startLevel = isMobileDevice() ? 1 : 0;
       screenLevelRef.current = startLevel;
       setScreenLevel(startLevel);
       stream.getVideoTracks()[0].onended = () => {
