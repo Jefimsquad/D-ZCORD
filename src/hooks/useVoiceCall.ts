@@ -115,8 +115,6 @@ export function useVoiceCall(
   const pendingCloseRef = useRef(new Map<string, number>());
   // Tentativas de ICE restart por peer (falha de rede transitória)
   const iceRetryRef = useRef(new Map<string, number>());
-  // Geração do canal de sinalização: recria ao detectar envio falho
-  const [signalEpoch, setSignalEpoch] = useState(0);
   // Contadores de sinalização por peer (diagnóstico definitivo)
   const signalCountersRef = useRef<
     Record<string, { offerSent: number; offerRecv: number; answerSent: number; answerRecv: number; iceSent: number; iceRecv: number; lastSignal: string }>
@@ -386,18 +384,20 @@ export function useVoiceCall(
       if (!ch) return;
       const kind = payload.kind;
       bumpSignal(to, kind === 'offer' ? 'offerSent' : kind === 'answer' ? 'answerSent' : 'iceSent', `enviou ${kind}`);
+      // Fire-and-forget de propósito: o broadcast com ack:true confirma 'ok';
+      // NUNCA recriar o canal por causa de ack (loop de resubscribe derruba
+      // o ICE em 'checking' eterno). Oferta perdida se cura no re-offer.
       try {
         const res = ch.send({
           type: 'broadcast',
           event: 'signal',
           payload: { ...payload, to, from: userId } as SignalPayload,
         }) as unknown as Promise<string> | undefined;
-        // Envio falhou (canal surdo): recria o canal de sinalização
         res?.then?.((r) => {
-          if (r !== 'ok') setSignalEpoch((e) => e + 1);
-        }).catch?.(() => setSignalEpoch((e) => e + 1));
+          if (r !== 'ok') console.warn('[voz] sinal sem ack:', kind, r);
+        }).catch?.(() => {});
       } catch {
-        setSignalEpoch((e) => e + 1);
+        /* canal trocando: re-offer cobre */
       }
     },
     [userId, bumpSignal]
@@ -621,7 +621,9 @@ export function useVoiceCall(
     };
 
     const ch = supabase.channel(`voice-signal:${channelId}`, {
-      config: { broadcast: { self: false } },
+      // ack:true = o servidor confirma cada broadcast ('ok'). Sem isso o
+      // send() nunca confirma e qualquer checagem de entrega vira falso erro.
+      config: { broadcast: { self: false, ack: true } },
     });
     signalChRef.current = ch;
     ch.on('broadcast', { event: 'signal' }, ({ payload }) => {
@@ -637,7 +639,7 @@ export function useVoiceCall(
       signalChRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, userId, channelId, createPeer, sendSignal, closePeer, signalEpoch, bumpSignal]);
+  }, [enabled, userId, channelId, createPeer, sendSignal, closePeer, bumpSignal]);
 
   // --- Descoberta: cria PC com quem está na call / limpa quem saiu ---
   // (só após sinalização pronta; oferta antes disso seria descartada)
@@ -680,6 +682,7 @@ export function useVoiceCall(
     return () => {
       pendingCloseRef.current.forEach((t) => window.clearTimeout(t));
       pendingCloseRef.current.clear();
+      lastReofferRef.current.clear();
       iceRetryRef.current.clear();
       peersRef.current.forEach((pc) => pc.close());
       peersRef.current.clear();
@@ -858,12 +861,20 @@ export function useVoiceCall(
   // porque nossa oferta (ou a resposta dela) se perdeu no broadcast.
   // Reofertar aqui reconecta sozinho em segundos, sem mexer em nada.
   // Também alimenta o painel de diagnóstico (bytes recebidos por peer).
+  // Espaçado (6s por peer): sem isso vira tempestade de ofertas que
+  // reinicia o ICE sem parar e ele nunca sai do 'checking'.
+  const lastReofferRef = useRef(new Map<string, number>());
   useEffect(() => {
     if (!enabled) return;
     const id = setInterval(async () => {
+      const now = Date.now();
       peersRef.current.forEach((pc, pid) => {
         if (pc.signalingState === 'have-local-offer' && !makingOfferRef.current.get(pid)) {
-          negotiate(pid);
+          const last = lastReofferRef.current.get(pid) || 0;
+          if (now - last > 6000) {
+            lastReofferRef.current.set(pid, now);
+            negotiate(pid);
+          }
         }
       });
       const next: Record<string, PeerDebugInfo> = {};
