@@ -19,6 +19,19 @@ export interface RemoteVideo {
   stream: MediaStream;
 }
 
+// Diagnóstico por peer (painel "Saúde da call"): diz EXATAMENTE onde trava
+// (sinalização? rede/NAT? bytes chegando?) em vez de "conectando" eterno.
+export interface PeerDebugInfo {
+  user_id: string;
+  connectionState: string;
+  iceState: string;
+  signalingState: string;
+  /** bytes de áudio recebidos (-1 = ainda sem medição) */
+  audioBytes: number;
+  /** bytes de vídeo recebidos (-1 = ainda sem medição) */
+  videoBytes: number;
+}
+
 // Escada automática da tela (cai sozinha quando a rede/CPU não aguenta)
 const SCREEN_LADDER = [
   { downBy: 1, fps: 30, bitrate: 5_000_000, label: '1080p' },
@@ -42,6 +55,8 @@ interface UseVoiceCallResult {
   remoteVideos: RemoteVideo[];
   speakingIds: string[];
   screenQuality: string;
+  signalReady: boolean;
+  peerDebug: Record<string, PeerDebugInfo>;
 }
 
 // Mesh WebRTC (áudio + câmera + tela) com padrão polite/impolite:
@@ -66,6 +81,7 @@ export function useVoiceCall(
   const [remoteVideos, setRemoteVideos] = useState<RemoteVideo[]>([]);
   const [speakingIds, setSpeakingIds] = useState<string[]>([]);
   const [signalReady, setSignalReady] = useState(false);
+  const [peerDebug, setPeerDebug] = useState<Record<string, PeerDebugInfo>>({});
   const [screenLevel, setScreenLevel] = useState(0);
   const screenLevelRef = useRef(0);
 
@@ -89,6 +105,8 @@ export function useVoiceCall(
   const videoStreamIdsRef = useRef(new Map<string, string>());
   // Fechamentos adiados (graça de 5s p/ sync parcial da presença)
   const pendingCloseRef = useRef(new Map<string, number>());
+  // Tentativas de ICE restart por peer (falha de rede transitória)
+  const iceRetryRef = useRef(new Map<string, number>());
 
   // --- Qualidade: limita bitrate/fps por tipo (trava menos, adapta à rede) ---
   const tuneSender = useCallback(async (pc: RTCPeerConnection, track: MediaStreamTrack, kind: 'audio' | 'camera' | 'screen') => {    try {
@@ -470,7 +488,27 @@ export function useVoiceCall(
         }
       };
       pc.onconnectionstatechange = () => {
-        if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        if (pc.connectionState === 'connected') {
+          iceRetryRef.current.delete(id);
+        } else if (pc.connectionState === 'failed') {
+          // Antes: destruía a conexão de cara e ficava mudo/preto eternamente
+          // (nada recriava o peer até alguém mexer na presença). Agora tenta
+          // ICE restart (novo ufrag + nova oferta) até 3x antes de desistir.
+          const n = (iceRetryRef.current.get(id) || 0) + 1;
+          if (n <= 3) {
+            iceRetryRef.current.set(id, n);
+            try {
+              pc.restartIce();
+            } catch {
+              /* segue para renegociar mesmo assim */
+            }
+            negotiate(id);
+          } else {
+            iceRetryRef.current.delete(id);
+            closePeer(id);
+          }
+        } else if (pc.connectionState === 'closed') {
+          iceRetryRef.current.delete(id);
           closePeer(id);
         }
       };
@@ -599,6 +637,7 @@ export function useVoiceCall(
     return () => {
       pendingCloseRef.current.forEach((t) => window.clearTimeout(t));
       pendingCloseRef.current.clear();
+      iceRetryRef.current.clear();
       peersRef.current.forEach((pc) => pc.close());
       peersRef.current.clear();
       makingOfferRef.current.clear();
@@ -772,6 +811,50 @@ export function useVoiceCall(
     }
   }, [attachAllTracks, notifyMedia]);
 
+  // Cura ofertas/respostas perdidas: se ficamos em 'have-local-offer' é
+  // porque nossa oferta (ou a resposta dela) se perdeu no broadcast.
+  // Reofertar aqui reconecta sozinho em segundos, sem mexer em nada.
+  // Também alimenta o painel de diagnóstico (bytes recebidos por peer).
+  useEffect(() => {
+    if (!enabled) return;
+    const id = setInterval(async () => {
+      peersRef.current.forEach((pc, pid) => {
+        if (pc.signalingState === 'have-local-offer' && !makingOfferRef.current.get(pid)) {
+          negotiate(pid);
+        }
+      });
+      const next: Record<string, PeerDebugInfo> = {};
+      for (const [pid, pc] of peersRef.current) {
+        let audioBytes = -1;
+        let videoBytes = -1;
+        try {
+          const stats = await pc.getStats();
+          stats.forEach((r: unknown) => {
+            const s = r as Record<string, unknown>;
+            if (s.type !== 'inbound-rtp') return;
+            const bytes = s.bytesReceived as number | undefined;
+            const kind = (s.kind || s.mediaType) as string | undefined;
+            if (typeof bytes !== 'number') return;
+            if (kind === 'audio') audioBytes = Math.max(audioBytes, bytes);
+            else if (kind === 'video') videoBytes = Math.max(videoBytes, bytes);
+          });
+        } catch {
+          /* stats indisponíveis: mantém -1 */
+        }
+        next[pid] = {
+          user_id: pid,
+          connectionState: pc.connectionState,
+          iceState: pc.iceConnectionState,
+          signalingState: pc.signalingState,
+          audioBytes,
+          videoBytes,
+        };
+      }
+      setPeerDebug(next);
+    }, 3000);
+    return () => clearInterval(id);
+  }, [enabled, negotiate]);
+
   // --- Detecção de fala dos remotos (anel verde) ---
   useEffect(() => {
     if (!remotes.length) {
@@ -843,5 +926,7 @@ export function useVoiceCall(
     remoteVideos,
     speakingIds,
     screenQuality: (SCREEN_LADDER[screenLevel] || SCREEN_LADDER[0]).label,
+    signalReady,
+    peerDebug,
   };
 }

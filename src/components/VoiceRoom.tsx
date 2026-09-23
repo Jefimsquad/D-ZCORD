@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Channel, UserProfile } from '../types';
-import type { RemoteAudio, RemoteVideo } from '../hooks/useVoiceCall';
+import type { RemoteAudio, RemoteVideo, PeerDebugInfo } from '../hooks/useVoiceCall';
 import type { VoicePeerInfo } from '../lib/voice';
 import {
   Mic,
@@ -37,6 +37,8 @@ interface VoiceRoomProps {
   onToggleCamera?: () => void;
   onToggleScreen?: () => void;
   screenQuality?: string;
+  peerDebug?: Record<string, PeerDebugInfo>;
+  signalReady?: boolean;
 }
 
 export const RemoteAudioEl = ({ stream }: { stream: MediaStream }) => {
@@ -232,6 +234,8 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   onToggleCamera,
   onToggleScreen,
   screenQuality = '',
+  peerDebug = {},
+  signalReady = false,
 }) => {
   const remotePeers = participants.filter((p) => p.user_id !== currentUser.id);
   const canShareScreen =
@@ -417,6 +421,42 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
           <div className="max-w-5xl w-full bg-[#3c331e] border border-[#f0b232]/30 text-[#f0b232] text-sm px-4 py-2 rounded-lg">
             Modo demonstração: conecte o Supabase para voz em tempo real com outros usuários.
           </div>
+        )}
+        {/* Saúde da call: diz onde trava (rede? sinalização? bytes?) */}
+        {isSupabaseConnected && remotePeers.length > 0 && (
+          <details className="max-w-5xl w-full bg-[#1e1f22] border border-[#35373c] text-xs px-4 py-2 rounded-lg">
+            <summary className="cursor-pointer text-[#b5bac1] hover:text-white select-none">
+              🩺 Saúde da call {signalReady ? '(sinalização ok)' : '(sinalização conectando…)'}
+            </summary>
+            <div className="mt-2 flex flex-col gap-1.5">
+              {remotePeers.map((peer) => {
+                const d = peerDebug[peer.user_id];
+                const audioOk = (d?.audioBytes ?? -1) > 0;
+                const videoOk = (d?.videoBytes ?? -1) > 0;
+                const failed =
+                  d?.connectionState === 'failed' || d?.iceState === 'failed';
+                const hint = !d
+                  ? 'estabelecendo conexão…'
+                  : failed
+                    ? 'rede bloqueando conexão direta (NAT restrito). Troque de rede/Wi-Fi ou aguarde o relay.'
+                    : audioOk || videoOk
+                      ? `recebendo dados (áudio ${d.audioBytes}B • vídeo ${d.videoBytes}B)`
+                      : d.connectionState === 'connected'
+                        ? 'conectado, aguardando primeiros pacotes…'
+                        : 'estabelecendo conexão… (ICE + sinalização tentando sozinhos)';
+                return (
+                  <div key={peer.user_id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[#b5bac1]">
+                    <span className="text-white font-medium">{peer.display_name}</span>
+                    <span>
+                      conexão: <b className={failed ? 'text-[#f23f43]' : audioOk || videoOk ? 'text-[#23a55a]' : 'text-[#f0b232]'}>{d?.connectionState ?? '—'}</b>
+                    </span>
+                    <span>rede (ICE): {d?.iceState ?? '—'}</span>
+                    <span className="text-[#949ba4]">{hint}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </details>
         )}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl w-full">
           {/* Current User Tile */}

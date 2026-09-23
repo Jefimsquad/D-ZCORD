@@ -886,6 +886,8 @@ Recomendo dividir o fluxo em:
           onToggleCamera={() => voiceCall.toggleCamera()}
           onToggleScreen={() => voiceCall.toggleScreenShare()}
           screenQuality={voiceCall.screenQuality}
+          peerDebug={voiceCall.peerDebug}
+          signalReady={voiceCall.signalReady}
           onDisconnect={() => {
             setActiveVoiceChannel(null);
             const firstText = activeServer?.channels.find((c) => c.type === 'text');

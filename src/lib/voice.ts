@@ -56,6 +56,16 @@ export const RTC_CONFIG: RTCConfiguration = (() => {
       ?.VITE_TURN_CREDENTIAL;
     if (urls && username && credential) {
       iceServers.push({ urls: urls.split(',').map((u) => u.trim()), username, credential });
+    } else {
+      // Fallback público gratuito: quando os dois PCs estão atrás de NAT
+      // restrito, só STUN não atravessa e a call fica muda/preta eternamente.
+      // O TURN relaya a mídia nesse caso. Se estiver fora do ar, o ICE
+      // simplesmente ignora e tenta direto como antes (sem quebrar nada).
+      iceServers.push({
+        urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443'],
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+      });
     }
   } catch {
     /* env indisponível: segue só com STUN */
