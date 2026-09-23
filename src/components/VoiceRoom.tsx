@@ -441,9 +441,11 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                     ? 'rede bloqueando conexão direta (NAT restrito). Troque de rede/Wi-Fi ou aguarde o relay.'
                     : audioOk || videoOk
                       ? `recebendo dados (áudio ${d.audioBytes}B • vídeo ${d.videoBytes}B)`
-                      : d.connectionState === 'connected'
-                        ? 'conectado, aguardando primeiros pacotes…'
-                        : 'estabelecendo conexão… (ICE + sinalização tentando sozinhos)';
+                      : d.offerSent > 0 && d.answerRecv === 0 && d.offerRecv === 0
+                        ? 'sinalização sem resposta (oferta enviada, nada volta). Confirme se o outro lado atualizou a página.'
+                        : d.connectionState === 'connected'
+                          ? 'conectado, aguardando primeiros pacotes…'
+                          : 'estabelecendo conexão… (ICE + sinalização tentando sozinhos)';
                 return (
                   <div key={peer.user_id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[#b5bac1]">
                     <span className="text-white font-medium">{peer.display_name}</span>
@@ -451,6 +453,9 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                       conexão: <b className={failed ? 'text-[#f23f43]' : audioOk || videoOk ? 'text-[#23a55a]' : 'text-[#f0b232]'}>{d?.connectionState ?? '—'}</b>
                     </span>
                     <span>rede (ICE): {d?.iceState ?? '—'}</span>
+                    <span>
+                      sinal: of.env/rec {d?.offerSent ?? 0}/{d?.offerRecv ?? 0} • resp.env/rec {d?.answerSent ?? 0}/{d?.answerRecv ?? 0} • {d?.lastSignal ?? '—'}
+                    </span>
                     <span className="text-[#949ba4]">{hint}</span>
                   </div>
                 );

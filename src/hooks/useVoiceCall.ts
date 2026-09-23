@@ -30,6 +30,14 @@ export interface PeerDebugInfo {
   audioBytes: number;
   /** bytes de vídeo recebidos (-1 = ainda sem medição) */
   videoBytes: number;
+  /** contadores de sinalização (oferta/resposta/gelo enviados/recebidos) */
+  offerSent: number;
+  offerRecv: number;
+  answerSent: number;
+  answerRecv: number;
+  iceSent: number;
+  iceRecv: number;
+  lastSignal: string;
 }
 
 // Escada automática da tela (cai sozinha quando a rede/CPU não aguenta)
@@ -107,6 +115,19 @@ export function useVoiceCall(
   const pendingCloseRef = useRef(new Map<string, number>());
   // Tentativas de ICE restart por peer (falha de rede transitória)
   const iceRetryRef = useRef(new Map<string, number>());
+  // Geração do canal de sinalização: recria ao detectar envio falho
+  const [signalEpoch, setSignalEpoch] = useState(0);
+  // Contadores de sinalização por peer (diagnóstico definitivo)
+  const signalCountersRef = useRef<
+    Record<string, { offerSent: number; offerRecv: number; answerSent: number; answerRecv: number; iceSent: number; iceRecv: number; lastSignal: string }>
+  >({});
+  const bumpSignal = useCallback((id: string, field: 'offerSent' | 'offerRecv' | 'answerSent' | 'answerRecv' | 'iceSent' | 'iceRecv', label: string) => {
+    const cur =
+      signalCountersRef.current[id] || { offerSent: 0, offerRecv: 0, answerSent: 0, answerRecv: 0, iceSent: 0, iceRecv: 0, lastSignal: '' };
+    cur[field] += 1;
+    cur.lastSignal = `${label} ${new Date().toLocaleTimeString()}`;
+    signalCountersRef.current[id] = cur;
+  }, []);
 
   // --- Qualidade: limita bitrate/fps por tipo (trava menos, adapta à rede) ---
   const tuneSender = useCallback(async (pc: RTCPeerConnection, track: MediaStreamTrack, kind: 'audio' | 'camera' | 'screen') => {    try {
@@ -361,13 +382,25 @@ export function useVoiceCall(
 
   const sendSignal = useCallback(
     (to: string, payload: Omit<SignalPayload, 'to' | 'from'>) => {
-      signalChRef.current?.send({
-        type: 'broadcast',
-        event: 'signal',
-        payload: { ...payload, to, from: userId } as SignalPayload,
-      });
+      const ch = signalChRef.current;
+      if (!ch) return;
+      const kind = payload.kind;
+      bumpSignal(to, kind === 'offer' ? 'offerSent' : kind === 'answer' ? 'answerSent' : 'iceSent', `enviou ${kind}`);
+      try {
+        const res = ch.send({
+          type: 'broadcast',
+          event: 'signal',
+          payload: { ...payload, to, from: userId } as SignalPayload,
+        }) as unknown as Promise<string> | undefined;
+        // Envio falhou (canal surdo): recria o canal de sinalização
+        res?.then?.((r) => {
+          if (r !== 'ok') setSignalEpoch((e) => e + 1);
+        }).catch?.(() => setSignalEpoch((e) => e + 1));
+      } catch {
+        setSignalEpoch((e) => e + 1);
+      }
     },
-    [userId]
+    [userId, bumpSignal]
   );
 
   const negotiate = useCallback(
@@ -382,11 +415,17 @@ export function useVoiceCall(
           await sendSignal(id, { kind: 'offer', sdp: ld.sdp, sdpType: ld.type });
         }
       } catch {
-        // Falha transitória (ex: oferta remota chegou junto): 1 retry se estável
+        // Falha transitória (ex: oferta remota chegou junto): retry se ainda
+        // houver algo pendente (estável ou aguardando resposta = re-oferta)
         if (attempt < 2) {
           setTimeout(() => {
             const cur = peersRef.current.get(id);
-            if (cur && cur.signalingState === 'stable') negotiate(id, attempt + 1);
+            if (
+              cur &&
+              (cur.signalingState === 'stable' || cur.signalingState === 'have-local-offer')
+            ) {
+              negotiate(id, attempt + 1);
+            }
           }, 1500);
         }
       } finally {
@@ -537,6 +576,7 @@ export function useVoiceCall(
       if (!p || p.to !== userId || !p.from) return;
       const polite = userId < p.from;
       if (p.kind === 'offer' && p.sdp) {
+        bumpSignal(p.from, 'offerRecv', 'recebeu oferta');
         const pc = createPeer(p.from);
         const collision = pc.signalingState !== 'stable' || makingOfferRef.current.get(p.from);
         if (collision && !polite) return; // impolite ignora; o polite resolve
@@ -554,6 +594,7 @@ export function useVoiceCall(
           closePeer(p.from);
         }
       } else if (p.kind === 'answer' && p.sdp) {
+        bumpSignal(p.from, 'answerRecv', 'recebeu resposta');
         const pc = peersRef.current.get(p.from);
         if (!pc || pc.signalingState === 'stable') return;
         try {
@@ -567,6 +608,7 @@ export function useVoiceCall(
           closePeer(p.from);
         }
       } else if (p.kind === 'ice' && p.candidate) {
+        bumpSignal(p.from, 'iceRecv', 'recebeu rede');
         const pc = peersRef.current.get(p.from);
         if (pc?.remoteDescription) {
           await pc.addIceCandidate(new RTCIceCandidate(p.candidate)).catch(() => {});
@@ -594,7 +636,8 @@ export function useVoiceCall(
       supabase.removeChannel(ch);
       signalChRef.current = null;
     };
-  }, [enabled, userId, channelId, createPeer, sendSignal, closePeer]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, userId, channelId, createPeer, sendSignal, closePeer, signalEpoch, bumpSignal]);
 
   // --- Descoberta: cria PC com quem está na call / limpa quem saiu ---
   // (só após sinalização pronta; oferta antes disso seria descartada)
@@ -848,6 +891,13 @@ export function useVoiceCall(
           signalingState: pc.signalingState,
           audioBytes,
           videoBytes,
+          offerSent: signalCountersRef.current[pid]?.offerSent || 0,
+          offerRecv: signalCountersRef.current[pid]?.offerRecv || 0,
+          answerSent: signalCountersRef.current[pid]?.answerSent || 0,
+          answerRecv: signalCountersRef.current[pid]?.answerRecv || 0,
+          iceSent: signalCountersRef.current[pid]?.iceSent || 0,
+          iceRecv: signalCountersRef.current[pid]?.iceRecv || 0,
+          lastSignal: signalCountersRef.current[pid]?.lastSignal || '—',
         };
       }
       setPeerDebug(next);
