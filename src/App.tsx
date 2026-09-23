@@ -14,6 +14,7 @@ import { ServerSidebar } from './components/ServerSidebar';
 import { ChannelSidebar } from './components/ChannelSidebar';
 import { ChatArea } from './components/ChatArea';
 import { VoiceRoom } from './components/VoiceRoom';
+import { VoiceErrorBoundary } from './components/VoiceErrorBoundary';
 import { MemberListSidebar } from './components/MemberListSidebar';
 import { DirectMessagesView } from './components/DirectMessagesView';
 import { UserSettingsModal } from './components/UserSettingsModal';
@@ -865,6 +866,14 @@ Recomendo dividir o fluxo em:
         />
       ) : activeChannel?.type === 'voice' ? (
         // Active Voice Channel Room (WebRTC / Grid View)
+        <VoiceErrorBoundary
+          key={activeChannel.id}
+          onReset={() => {
+            setActiveVoiceChannel(null);
+            const firstText = activeServer?.channels.find((c) => c.type === 'text');
+            if (firstText) setActiveChannelId(firstText.id);
+          }}
+        >
         <VoiceRoom
           channel={activeChannel}
           currentUser={currentUser}
@@ -895,6 +904,7 @@ Recomendo dividir o fluxo em:
             if (firstText) setActiveChannelId(firstText.id);
           }}
         />
+        </VoiceErrorBoundary>
       ) : activeChannel ? (
         // Text Channel Chat Area with Realtime
         <ChatArea

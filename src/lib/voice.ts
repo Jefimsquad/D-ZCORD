@@ -53,7 +53,15 @@ export const RTC_CONFIG: RTCConfiguration = (() => {
     const username = env?.VITE_TURN_USERNAME;
     const credential = env?.VITE_TURN_CREDENTIAL;
     if (urls && username && credential) {
-      iceServers.push({ urls: urls.split(',').map((u) => u.trim()).filter(Boolean), username, credential });
+      // Normaliza: sem esquema na frente, assume turn: (URL sem esquema
+      // faz o new RTCPeerConnection LANÇAR exceção e derruba o app inteiro
+      // em tela cinza). Entradas inválidas são descartadas, nunca quebram.
+      const list = urls
+        .split(',')
+        .map((u) => u.trim())
+        .filter(Boolean)
+        .map((u) => (/^(stun|turn|turns):/i.test(u) ? u : `turn:${u}`));
+      if (list.length) iceServers.push({ urls: list, username, credential });
     }
     // (Sem fallback público hardcoded: o OpenRelay removeu as credenciais
     // estáticas — user/senha fixos só geram 401 e atrasam o ICE à toa.)
@@ -63,6 +71,18 @@ export const RTC_CONFIG: RTCConfiguration = (() => {
   return { iceServers };
 })();
 
+// Monta a config filtrando URLs inválidas (uma URL ruim derruba o
+// construtor do RTCPeerConnection e o app inteiro junto).
+export function buildRtcConfig(): RTCConfiguration {
+  const valid = (s: RTCIceServer) => {
+    const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
+    return urls.some((u) => /^(stun|turn|turns):[^/]+/i.test(String(u || '').trim()));
+  };
+  const iceServers = [...(RTC_CONFIG.iceServers || []), ...getExtraIceServers()].filter(valid);
+  return {
+    iceServers: iceServers.length ? iceServers : [{ urls: ['stun:stun.l.google.com:19302'] }],
+  };
+}
 // TURN gratuito via Metered OpenRelay (20 GB/mês): exige conta gratuita.
 // Vercel → Environment Variables: VITE_METERED_APP + VITE_METERED_KEY.
 // Busca uma vez por sessão; sem elas, a call tenta P2P direto (STUN).

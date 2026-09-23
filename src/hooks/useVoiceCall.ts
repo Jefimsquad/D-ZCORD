@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import type { UserProfile } from '../types';
 import { getSupabase } from '../lib/supabase';
-import { RTC_CONFIG, getExtraIceServers, ensureTurnServers, type LocalMediaFlags, type SignalPayload, type VoicePeerInfo } from '../lib/voice';
+import { RTC_CONFIG, buildRtcConfig, getExtraIceServers, ensureTurnServers, type LocalMediaFlags, type SignalPayload, type VoicePeerInfo } from '../lib/voice';
 import { isMobileDevice } from '../lib/voice';
 
 export interface RemoteAudio {
@@ -559,10 +559,19 @@ export function useVoiceCall(
   const createPeer = useCallback(
     (id: string) => {
       if (peersRef.current.has(id)) return peersRef.current.get(id)!;
-      // STUN fixo + TURN buscado (Metered) se já carregado nesta sessão
-      const pc = new RTCPeerConnection({
-        iceServers: [...(RTC_CONFIG.iceServers || []), ...getExtraIceServers()],
-      });
+      // STUN fixo + TURN (env/Metered) já validados. Se o construtor lançar
+      // (navegador sem WebRTC ou config rejeitada), tenta STUN puro; se nem
+      // assim, desiste do peer SEM derrubar o app (tela cinza da morte).
+      let pc: RTCPeerConnection | null = null;
+      try {
+        pc = new RTCPeerConnection(buildRtcConfig());
+      } catch {
+        try {
+          pc = new RTCPeerConnection({ iceServers: [...(RTC_CONFIG.iceServers || [])] });
+        } catch {
+          return null;
+        }
+      }
       peersRef.current.set(id, pc);
       bindPeer(id, pc);
       attachAllTracks(pc);
@@ -598,6 +607,7 @@ export function useVoiceCall(
       if (p.kind === 'offer' && p.sdp) {
         bumpSignal(p.from, 'offerRecv', 'recebeu oferta');
         const pc = createPeer(p.from);
+        if (!pc) return; // sem WebRTC válido: ignora sem quebrar
         const collision = pc.signalingState !== 'stable' || makingOfferRef.current.get(p.from);
         if (collision && !polite) return; // impolite ignora; o polite resolve
         try {
