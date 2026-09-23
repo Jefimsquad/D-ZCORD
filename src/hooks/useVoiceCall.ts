@@ -114,6 +114,8 @@ export function useVoiceCall(
   const videoStreamIdsRef = useRef(new Map<string, string>());
   // Fechamentos adiados (graça de 5s p/ sync parcial da presença)
   const pendingCloseRef = useRef(new Map<string, number>());
+  // Re-ofertas de revive (estágio 1 do fechamento em 2 estágios)
+  const reviveRef = useRef(new Map<string, number>());
   // Tentativas de ICE restart por peer (falha de rede transitória)
   const iceRetryRef = useRef(new Map<string, number>());
   // Contadores de sinalização por peer (diagnóstico definitivo)
@@ -367,6 +369,16 @@ export function useVoiceCall(
 
   // --- Peers ---
   const closePeer = useCallback((id: string) => {
+    const t = pendingCloseRef.current.get(id);
+    if (t !== undefined) {
+      window.clearTimeout(t);
+      pendingCloseRef.current.delete(id);
+    }
+    const r = reviveRef.current.get(id);
+    if (r !== undefined) {
+      window.clearTimeout(r);
+      reviveRef.current.delete(id);
+    }
     peersRef.current.get(id)?.close();
     peersRef.current.delete(id);
     makingOfferRef.current.delete(id);
@@ -673,8 +685,10 @@ export function useVoiceCall(
 
   // --- Descoberta: cria PC com quem está na call / limpa quem saiu ---
   // (só após sinalização pronta; oferta antes disso seria descartada)
-  // Quem some da presença por alguns segundos (sync parcial do Realtime) NÃO
-  // tem a conexão destruída na hora: espera 5s e só fecha se continuar fora.
+  // Quem some da presença NÃO morre na hora: republicar presença (ex: mutar)
+  // pode gerar um sync parcial sem o outro usuário por alguns segundos, e
+  // matar o peer aí derruba a call à toa. Fechamento em 2 estágios:
+  // 6s → re-oferta (peer pode estar vivo, só sem presença); 16s → fecha.
   useEffect(() => {
     if (!enabled || !signalReady) return;
     participants.forEach((p) => {
@@ -687,17 +701,28 @@ export function useVoiceCall(
         window.clearTimeout(t);
         pendingCloseRef.current.delete(p.user_id);
       }
+      const r = reviveRef.current.get(p.user_id);
+      if (r !== undefined) {
+        window.clearTimeout(r);
+        reviveRef.current.delete(p.user_id);
+      }
     });
     const ids = new Set(participants.map((p) => p.user_id));
     peersRef.current.forEach((_pc, id) => {
-      if (!ids.has(id) && !pendingCloseRef.current.has(id)) {
-        const timer = window.setTimeout(() => {
+      if (ids.has(id) || pendingCloseRef.current.has(id) || reviveRef.current.has(id)) return;
+      const timer = window.setTimeout(() => {
+        reviveRef.current.delete(id);
+        // Revalida: só age se continua fora da presença
+        if (participantsRef.current.some((p) => p.user_id === id)) return;
+        // Estágio 1: tenta reviver via re-oferta antes de desistir
+        negotiate(id);
+        const finisher = window.setTimeout(() => {
           pendingCloseRef.current.delete(id);
-          const stillGone = !participantsRef.current.some((p) => p.user_id === id);
-          if (stillGone) closePeer(id);
-        }, 5000);
-        pendingCloseRef.current.set(id, timer);
-      }
+          if (!participantsRef.current.some((p) => p.user_id === id)) closePeer(id);
+        }, 10000);
+        pendingCloseRef.current.set(id, finisher);
+      }, 6000);
+      reviveRef.current.set(id, timer);
     });
   }, [participants, enabled, signalReady, userId, createPeer, negotiate, closePeer]);
 
@@ -712,6 +737,8 @@ export function useVoiceCall(
     return () => {
       pendingCloseRef.current.forEach((t) => window.clearTimeout(t));
       pendingCloseRef.current.clear();
+      reviveRef.current.forEach((t) => window.clearTimeout(t));
+      reviveRef.current.clear();
       lastReofferRef.current.clear();
       iceRetryRef.current.clear();
       peersRef.current.forEach((pc) => pc.close());
