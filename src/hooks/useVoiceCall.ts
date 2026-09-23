@@ -7,7 +7,10 @@ import { isMobileDevice } from '../lib/voice';
 
 export interface RemoteAudio {
   user_id: string;
+  streamId: string;
   stream: MediaStream;
+  /** Áudio do sistema que vem junto do compartilhamento de tela (PC) */
+  screenAudio?: boolean;
 }
 
 export interface RemoteVideo {
@@ -35,6 +38,7 @@ interface UseVoiceCallResult {
   toggleCamera: () => Promise<void>;
   toggleScreenShare: () => Promise<void>;
   remotes: RemoteAudio[];
+  remoteScreenAudios: RemoteAudio[];
   remoteVideos: RemoteVideo[];
   speakingIds: string[];
   screenQuality: string;
@@ -58,6 +62,7 @@ export function useVoiceCall(
   const [screenOn, setScreenOn] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [remotes, setRemotes] = useState<RemoteAudio[]>([]);
+  const [remoteScreenAudios, setRemoteScreenAudios] = useState<RemoteAudio[]>([]);
   const [remoteVideos, setRemoteVideos] = useState<RemoteVideo[]>([]);
   const [speakingIds, setSpeakingIds] = useState<string[]>([]);
   const [signalReady, setSignalReady] = useState(false);
@@ -76,6 +81,12 @@ export function useVoiceCall(
   const screenTracksRef = useRef<MediaStreamTrack[]>([]);
   const onMediaChangeRef = useRef(onMediaChange);
   onMediaChangeRef.current = onMediaChange;
+  // Presença mais recente (para separar áudio do mic do áudio do sistema da tela)
+  const participantsRef = useRef(participants);
+  participantsRef.current = participants;
+  // Streams de vídeo já vistos por peer (streamId -> user_id): o áudio que
+  // chega no MESMO stream do vídeo é o áudio do sistema da tela, não o mic.
+  const videoStreamIdsRef = useRef(new Map<string, string>());
 
   // --- Qualidade: limita bitrate/fps por tipo (trava menos, adapta à rede) ---
   const tuneSender = useCallback(async (pc: RTCPeerConnection, track: MediaStreamTrack, kind: 'audio' | 'camera' | 'screen') => {    try {
@@ -104,6 +115,7 @@ export function useVoiceCall(
         enc.maxBitrate = lvl.bitrate;
         enc.maxFramerate = lvl.fps;
         if (lvl.downBy !== 1) enc.scaleResolutionDownBy = lvl.downBy;
+        else delete (enc as { scaleResolutionDownBy?: number }).scaleResolutionDownBy;
         params.degradationPreference = 'maintain-resolution';
       }
       await sender.setParameters(params);
@@ -307,7 +319,11 @@ export function useVoiceCall(
     peersRef.current.delete(id);
     makingOfferRef.current.delete(id);
     pendingIceRef.current.delete(id);
+    videoStreamIdsRef.current.forEach((owner, sid) => {
+      if (owner === id) videoStreamIdsRef.current.delete(sid);
+    });
     setRemotes((prev) => prev.filter((r) => r.user_id !== id));
+    setRemoteScreenAudios((prev) => prev.filter((r) => r.user_id !== id));
     setRemoteVideos((prev) => prev.filter((r) => r.user_id !== id));
   }, []);
 
@@ -400,12 +416,36 @@ export function useVoiceCall(
         const track = e.track;
         if (!stream || !track) return;
         if (track.kind === 'audio') {
-          setRemotes((prev) =>
-            prev.some((r) => r.user_id === id)
-              ? prev.map((r) => (r.user_id === id ? { ...r, stream } : r))
-              : [...prev, { user_id: id, stream }]
-          );
+          // No PC o getDisplayMedia costuma trazer o áudio do sistema junto.
+          // Antes ele sobrescrevia o mic do peer (mesma chave user_id) e o
+          // <video> da tela disputava autoplay com som -> tela preta.
+          // Agora: áudio da tela vai para lista própria; mic nunca é perdido.
+          const peer = participantsRef.current.find((p) => p.user_id === id);
+          const knownVideoOwner = videoStreamIdsRef.current.get(stream.id);
+          const isScreenAudio =
+            (!!peer?.screenStreamId && stream.id === peer.screenStreamId) ||
+            knownVideoOwner === id;
+          const entry: RemoteAudio = { user_id: id, streamId: stream.id, stream };
+          if (isScreenAudio) {
+            setRemoteScreenAudios((prev) =>
+              prev.some((r) => r.user_id === id && r.streamId === stream.id)
+                ? prev.map((r) => (r.user_id === id && r.streamId === stream.id ? entry : r))
+                : [...prev, { ...entry, screenAudio: true }]
+            );
+            track.onended = () => {
+              setRemoteScreenAudios((prev) =>
+                prev.filter((r) => !(r.user_id === id && r.streamId === stream.id))
+              );
+            };
+          } else {
+            setRemotes((prev) =>
+              prev.some((r) => r.user_id === id && r.streamId === stream.id)
+                ? prev.map((r) => (r.user_id === id && r.streamId === stream.id ? entry : r))
+                : [...prev, entry]
+            );
+          }
         } else {
+          videoStreamIdsRef.current.set(stream.id, id);
           setRemoteVideos((prev) => {
             const without = prev.filter((r) => !(r.user_id === id && r.streamId === stream.id));
             return [...without, { user_id: id, streamId: stream.id, stream }];
@@ -533,7 +573,9 @@ export function useVoiceCall(
       peersRef.current.clear();
       makingOfferRef.current.clear();
       pendingIceRef.current.clear();
+      videoStreamIdsRef.current.clear();
       setRemotes([]);
+      setRemoteScreenAudios([]);
       setRemoteVideos([]);
     };
   }, [channelId]);
@@ -612,14 +654,58 @@ export function useVoiceCall(
         throw new Error('Navegador sem suporte a compartilhamento (use Chrome/Edge HTTPS)');
       }
       const mobile = isMobileDevice();
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          width: { max: mobile ? 1280 : 1920 },
-          height: { max: mobile ? 720 : 1080 },
-          frameRate: { max: 30 },
-        },
-        audio: true,
-      });
+      // Celular: exatamente como antes (720p 30fps fixos — já está perfeito).
+      // PC: tenta com dicas de superfície primeiro; se o navegador/monitor
+      // recusar (ultrawide/4K, driver, política), cai para pedidos simples
+      // em vez de falhar ou entregar trilha sem frames (tela preta).
+      let stream: MediaStream | null = null;
+      if (mobile) {
+        stream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            width: { max: 1280 },
+            height: { max: 720 },
+            frameRate: { max: 30 },
+          },
+          audio: true,
+        });
+      } else {
+        const attempts: Array<DisplayMediaStreamOptions> = [
+          {
+            video: {
+              width: { max: 1920 },
+              height: { max: 1080 },
+              frameRate: { ideal: 30, max: 30 },
+              displaySurface: 'monitor',
+              surfaceSwitching: 'include',
+              selfBrowserSurface: 'exclude',
+              systemAudio: 'include',
+            } as MediaTrackConstraints,
+            audio: true,
+          },
+          {
+            video: {
+              width: { max: 1920 },
+              height: { max: 1080 },
+              frameRate: { max: 30 },
+            },
+            audio: true,
+          },
+          { video: true, audio: true },
+        ];
+        let lastErr: unknown = null;
+        for (const opts of attempts) {
+          try {
+            stream = await navigator.mediaDevices.getDisplayMedia(opts);
+            break;
+          } catch (err) {
+            lastErr = err;
+            const name = (err as { name?: string })?.name;
+            // Usuário cancelou: não tenta os fallbacks
+            if (name === 'NotAllowedError' || name === 'AbortError') throw err;
+          }
+        }
+        if (!stream) throw lastErr || new Error('Nenhuma trilha de vídeo retornada');
+      }
       if (!stream.getVideoTracks().length) {
         throw new Error('Nenhuma trilha de vídeo retornada');
       }
@@ -692,7 +778,7 @@ export function useVoiceCall(
           const v = (buf[i] - 128) / 128;
           sum += v * v;
         }
-        if (Math.sqrt(sum / buf.length) > 0.03) talking.push(id);
+        if (Math.sqrt(sum / buf.length) > 0.03 && !talking.includes(id)) talking.push(id);
       });
       setSpeakingIds((prev) => {
         const a = prev.slice().sort().join(',');
@@ -721,6 +807,7 @@ export function useVoiceCall(
     toggleCamera,
     toggleScreenShare,
     remotes,
+    remoteScreenAudios,
     remoteVideos,
     speakingIds,
     screenQuality: (SCREEN_LADDER[screenLevel] || SCREEN_LADDER[0]).label,

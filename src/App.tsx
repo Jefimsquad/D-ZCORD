@@ -942,7 +942,12 @@ Recomendo dividir o fluxo em:
 
       {/* Áudio global da call (continua fora da sala de voz) */}
       {voiceCall.remotes.map((r) => (
-        <RemoteAudioEl key={r.user_id} stream={r.stream} />
+        <RemoteAudioEl key={`${r.user_id}:${r.streamId}`} stream={r.stream} />
+      ))}
+      {/* Áudio do sistema das telas compartilhadas (PC): toca aqui para o
+          vídeo da tela poder ficar mutado e o autoplay nunca travar em preto */}
+      {voiceCall.remoteScreenAudios.map((r) => (
+        <RemoteAudioEl key={`screen:${r.user_id}:${r.streamId}`} stream={r.stream} />
       ))}
 
       {/* MODALS */}

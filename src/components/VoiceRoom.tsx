@@ -67,13 +67,15 @@ export const RemoteVideoEl = ({
   useEffect(() => {
     const el = ref.current;
     if (el) {
+      // React define o atributo `muted`, mas a política de autoplay do
+      // Chrome lê a PROPRIEDADE. Sem isso, tela de PC (com áudio do
+      // sistema) tenta autoplay com som, é bloqueada e fica preta.
+      el.muted = !audio;
       el.srcObject = stream;
       el.play().catch(() => {
         // Autoplay com áudio bloqueado: garante ao menos o vídeo
-        if (audio && el) {
-          el.muted = true;
-          el.play().catch(() => {});
-        }
+        el.muted = true;
+        el.play().catch(() => {});
       });
     }
     return () => {
@@ -86,6 +88,30 @@ export const RemoteVideoEl = ({
 const RemoteScreenTile = ({ peerName, stream }: { peerName: string; stream: MediaStream }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [fs, setFs] = useState(false);
+  // Se o navegador pausar a trilha (janela minimizada/protegida), o <video>
+  // fica preto. Mostra aviso em vez de preto puro.
+  const [stalled, setStalled] = useState(false);
+  useEffect(() => {
+    const tracks = stream.getVideoTracks();
+    const update = () =>
+      setStalled(tracks.length > 0 && tracks.some((t) => t.muted || t.readyState !== 'live'));
+    update();
+    tracks.forEach((t) => {
+      t.onmute = update;
+      t.onunmute = update;
+      t.onended = update;
+    });
+    stream.onaddtrack = update;
+    stream.onremovetrack = update;
+    return () => {
+      tracks.forEach((t) => {
+        t.onmute = null;
+        t.onunmute = null;
+      });
+      stream.onaddtrack = null;
+      stream.onremovetrack = null;
+    };
+  }, [stream]);
   useEffect(() => {
     const onFs = () => setFs(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', onFs);
@@ -115,7 +141,18 @@ const RemoteScreenTile = ({ peerName, stream }: { peerName: string; stream: Medi
       className="relative bg-black rounded-xl aspect-video flex flex-col items-center justify-center p-2 border border-[#23a55a] shadow-lg overflow-hidden col-span-2 cursor-pointer"
       title="Toque para tela cheia"
     >
-      <RemoteVideoEl stream={stream} audio className="w-full h-full object-contain rounded pointer-events-none" />
+      {/* Vídeo sempre mutado aqui: o áudio da tela toca no <audio> global
+          (App), que continua fora da sala. Vídeo mutado = autoplay liberado
+          no Chrome mesmo quando o PC compartilha com áudio do sistema. */}
+      <RemoteVideoEl stream={stream} className="w-full h-full object-contain rounded pointer-events-none" />
+      {stalled && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-center px-4">
+          <p className="text-sm text-[#f0b232]">
+            Sinal da tela pausado (janela minimizada ou conteúdo protegido).
+            Peça para {peerName} re-compartilhar a tela.
+          </p>
+        </div>
+      )}
       <div className="absolute bottom-3 left-3 bg-[#111214]/80 backdrop-blur px-3 py-1 rounded text-xs text-white pointer-events-none">
         Transmissão de Tela de {peerName} • ao vivo • toque p/ ampliar
       </div>
@@ -417,12 +454,21 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
           {remotePeers.map((peer) => {
             const remote = callRemotes.find((r) => r.user_id === peer.user_id);
             const speaking = callSpeakingIds.includes(peer.user_id);
+            const userVideos = callRemoteVideos.filter((v) => v.user_id === peer.user_id);
             const camVideo = callRemoteVideos.find(
               (v) => v.user_id === peer.user_id && peer.camStreamId && v.streamId === peer.camStreamId
             );
-            const screenVideo = callRemoteVideos.find(
-              (v) => v.user_id === peer.user_id && peer.screenStreamId && v.streamId === peer.screenStreamId
-            );
+            // Match exato pelo streamId da presença; se a presença ainda não
+            // atualizou (chega depois do WebRTC), cai para o vídeo do peer
+            // que NÃO é a câmera — evita tile preso em stream vazio/preto.
+            const screenVideo =
+              callRemoteVideos.find(
+                (v) =>
+                  v.user_id === peer.user_id && peer.screenStreamId && v.streamId === peer.screenStreamId
+              ) ||
+              (peer.screensharing
+                ? userVideos.find((v) => v !== camVideo && v.streamId !== peer.camStreamId)
+                : undefined);
             const showCam = !!peer.video || !!camVideo;
             const showScreen = !!peer.screensharing || !!screenVideo;
             return (
